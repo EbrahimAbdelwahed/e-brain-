@@ -61,12 +61,10 @@ Notes
   - You should see `vector` listed with a version.
 
 5) Optional: add a vector index for faster search
-- Depending on the pgvector version available in Neon, you can use HNSW or IVFFlat indexes:
-  - HNSW (if supported by your pgvector build):
-    - `CREATE INDEX IF NOT EXISTS embeddings_hnsw ON embeddings USING hnsw (embedding vector_l2_ops);`
-  - IVFFlat (works widely; analyze recommended):
-    - `CREATE INDEX IF NOT EXISTS embeddings_ivfflat ON embeddings USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);`
-    - `ANALYZE embeddings;`
+- Preferred: HNSW. Use the built-in CLI:
+  - `python -m e_brain.cli create-index --type hnsw`
+- Fallback: IVFFlat, if HNSW is unavailable in your pgvector build:
+  - `python -m e_brain.cli create-index --type ivfflat`
 - The app will still work without an index; indexes mainly improve retrieval latency.
 
 Troubleshooting
@@ -117,4 +115,3 @@ Posting (user-context; OAuth 1.0a)
 3) Ingest X accounts: `python -m e_brain.cli ingest-x`.
 4) Embed and generate: `python -m e_brain.cli embed` then `python -m e_brain.cli generate --theme ...`.
 5) Keep `DRY_RUN=true` until posting is fully configured with OAuth signing.
-

@@ -67,14 +67,15 @@ def init_db() -> None:
                 """
             )
 
+            # Note: type modifiers like vector(N) cannot be parameterized; inject validated int literal
+            emb_dim = int(s.embedding_dim)
             cur.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS embeddings (
                   item_id BIGINT PRIMARY KEY REFERENCES raw_items(id) ON DELETE CASCADE,
-                  embedding vector(%s)
+                  embedding vector({emb_dim})
                 )
-                """,
-                (s.embedding_dim,),
+                """
             )
 
             cur.execute(
@@ -226,3 +227,37 @@ def mark_posted(post_id: int) -> None:
             "UPDATE candidate_posts SET status='posted' WHERE id=%s",
             (post_id,),
         )
+
+
+def create_vector_index(index_type: str = "hnsw") -> None:
+    """Create a vector index on embeddings.embedding.
+
+    index_type: 'hnsw' (preferred) or 'ivfflat'.
+    """
+    index_type = (index_type or "").lower()
+    with get_conn() as conn, conn.cursor() as cur:
+        if index_type == "hnsw":
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS embeddings_hnsw
+                ON embeddings
+                USING hnsw (embedding vector_l2_ops)
+                """
+            )
+        elif index_type == "ivfflat":
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS embeddings_ivfflat
+                ON embeddings
+                USING ivfflat (embedding vector_l2_ops)
+                WITH (lists = 100)
+                """
+            )
+        else:
+            raise ValueError("index_type must be 'hnsw' or 'ivfflat'")
+        cur.execute("ANALYZE embeddings;")
+        # removed
+        # removed
+        # removed
+        # removed
+        # removed
