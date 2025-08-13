@@ -107,7 +107,9 @@ def _username_to_id(username: str, bearer: str) -> Optional[str]:
 
 
 def _user_recent_tweets(user_id: str, bearer: str, max_results: int = 5) -> list[dict]:
-    params = f"max_results={max_results}&tweet.fields=created_at,author_id,text"
+    # X API requires 5 <= max_results <= 100
+    effective_max = max(5, min(int(max_results or 5), 100))
+    params = f"max_results={effective_max}&tweet.fields=created_at,author_id,text"
     data = _x_get(f"/2/users/{user_id}/tweets?{params}", bearer)
     return data.get("data", []) if data else []
 
@@ -128,7 +130,8 @@ def ingest_from_accounts(accounts_md_path: str = "accounts-to-follow.md", max_pe
         source_id = upsert_source_x(handle)
         tweets = _user_recent_tweets(uid, settings.x_bearer_token, max_results=max_per_account)
         items = []
-        for tw in tweets:
+        # Respect caller's requested cap even if API requires >=5
+        for tw in tweets[: max(0, int(max_per_account))]:
             created = tw.get("created_at")
             created_at = dt.datetime.fromisoformat(created.replace("Z", "+00:00")) if created else dt.datetime.utcnow()
             items.append(
@@ -143,6 +146,6 @@ def ingest_from_accounts(accounts_md_path: str = "accounts-to-follow.md", max_pe
             )
         total_inserted += insert_raw_items(items)
         # Small pause between accounts to be gentle with rate limits
-        time.sleep(0.3)
+        time.sleep(1.0)
     logger.info("ingest_completed", extra={"inserted": total_inserted, "accounts": len(handles)})
     return total_inserted
