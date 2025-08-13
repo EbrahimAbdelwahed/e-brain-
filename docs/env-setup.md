@@ -102,6 +102,21 @@ Posting (user-context; OAuth 1.0a)
   - After ingesting, run: `python -m e_brain.cli embed`
   - Then generate: `python -m e_brain.cli generate --theme "neuroscience general facts"`
 
+## RSS/Blog Ingestion
+
+Dependencies
+- Install new libs for RSS ingestion: `pip install -r requirements.txt` (adds `feedparser`, `requests`, `beautifulsoup4`).
+
+Usage
+- Default curated feeds are built-in (Nature Neuroscience, Frontiers, JNeurosci, MIT News, Stanford Neuroscience, Neuromatch, CNS, arXiv cs.AI, Distill, DeepMind).
+- Run: `python -m e_brain.cli ingest-rss --max 20`
+- Optional filters and custom feeds file:
+  - `python -m e_brain.cli ingest-rss --feeds-file myfeeds.txt --filter "(neuro|brain|AI)"`
+
+Notes
+- Run `python -m e_brain.cli init-db` once to ensure the `raw_items.meta` column exists.
+- Full-text extraction uses a lightweight cleaner; some sites may produce shorter text.
+
 ## Posting Windows
 - The scheduler respects your window based on timezone passed to `publish` (default `US/Eastern`).
 - Configure windows via:

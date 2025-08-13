@@ -65,6 +65,39 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--tz", default="US/Eastern")
     s.set_defaults(func=cmd_publish)
 
+    s = sub.add_parser("ingest-rss", help="Ingest recent articles from curated RSS feeds")
+    s.add_argument("--feeds-file", default=None, help="Optional path to a newline-delimited list of feed URLs")
+    s.add_argument("--max", type=int, default=20, help="Max entries per feed")
+    s.add_argument(
+        "--interval-mins",
+        type=int,
+        default=60,
+        help="Update interval hint (stored in source meta; does not enforce scheduling)",
+    )
+    s.add_argument(
+        "--filter",
+        default=None,
+        help="Regex to include items (default targets neuro/brain/AI terms)",
+    )
+    def _cmd_ingest_rss(args: argparse.Namespace) -> None:
+        # Lazy import to avoid requiring RSS deps unless used
+        from .curation.rss_client import ingest_rss
+        feeds = None
+        if args.feeds_file:
+            try:
+                with open(args.feeds_file, "r", encoding="utf-8") as f:
+                    feeds = [ln.strip() for ln in f if ln.strip() and not ln.strip().startswith("#")]
+            except FileNotFoundError:
+                logger.error("feeds_file_missing", extra={"path": args.feeds_file})
+        count = ingest_rss(
+            feeds=feeds,
+            max_entries_per_feed=args.max,
+            update_interval_minutes=args.interval_mins,
+            include_filter=args.filter,
+        )
+        logger.info("rss_ingested", extra={"count": count})
+    s.set_defaults(func=_cmd_ingest_rss)
+
     s = sub.add_parser("create-index", help="Create vector index on embeddings (hnsw/ivfflat)")
     s.add_argument("--type", choices=["hnsw", "ivfflat"], default="hnsw")
     def _cmd_create_index(args: argparse.Namespace) -> None:

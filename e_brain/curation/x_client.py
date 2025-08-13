@@ -141,6 +141,7 @@ def ingest_from_accounts(accounts_md_path: str = "accounts-to-follow.md", max_pe
                     "source_id": source_id,
                     "author": handle,
                     "text": tw.get("text", "").strip(),
+                    "meta": {"kind": "x_tweet", "author_id": tw.get("author_id")},
                     "created_at": created_at,
                 }
             )

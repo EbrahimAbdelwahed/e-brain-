@@ -61,10 +61,16 @@ def init_db() -> None:
                   source_id INTEGER REFERENCES sources(id) ON DELETE SET NULL,
                   author TEXT,
                   text TEXT NOT NULL,
+                  meta JSONB NOT NULL DEFAULT '{}'::jsonb,
                   created_at TIMESTAMPTZ NOT NULL,
                   inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
                 """
+            )
+
+            # Ensure meta column exists for older deployments
+            cur.execute(
+                "ALTER TABLE raw_items ADD COLUMN IF NOT EXISTS meta JSONB NOT NULL DEFAULT '{}'::jsonb;"
             )
 
             # Note: type modifiers like vector(N) cannot be parameterized; inject validated int literal
@@ -109,6 +115,43 @@ def upsert_source_x(handle: str) -> int:
         return int(cur.fetchone()["id"])
 
 
+def upsert_source_rss(url: str, title: Optional[str] = None) -> int:
+    """Create or fetch an RSS source row by URL.
+
+    Stores title in sources.meta if provided.
+    """
+    with get_conn() as conn, conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            "SELECT id FROM sources WHERE type='rss' AND url=%s",
+            (url,),
+        )
+        row = cur.fetchone()
+        if row:
+            src_id = int(row["id"])
+        else:
+            cur.execute(
+                "INSERT INTO sources(type, url) VALUES('rss', %s) RETURNING id",
+                (url,),
+            )
+            src_id = int(cur.fetchone()["id"])
+
+        if title:
+            # Merge meta with new title
+            cur.execute(
+                "UPDATE sources SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb WHERE id=%s",
+                ({"title": title}, src_id),
+            )
+        return src_id
+
+
+def update_source_meta(source_id: int, meta_patch: dict) -> None:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE sources SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb WHERE id=%s",
+            (meta_patch, source_id),
+        )
+
+
 def insert_raw_items(items: Iterable[dict]) -> int:
     """Insert many raw items, ignoring duplicates by (source_type, source_ref)."""
     count = 0
@@ -124,8 +167,8 @@ def insert_raw_items(items: Iterable[dict]) -> int:
                 try:
                     cur.execute(
                         """
-                        INSERT INTO raw_items(source_type, source_ref, source_id, author, text, created_at)
-                        VALUES(%s,%s,%s,%s,%s,%s)
+                        INSERT INTO raw_items(source_type, source_ref, source_id, author, text, meta, created_at)
+                        VALUES(%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT (source_type, source_ref) DO NOTHING
                         """,
                         (
@@ -134,6 +177,7 @@ def insert_raw_items(items: Iterable[dict]) -> int:
                             it.get("source_id"),
                             it.get("author"),
                             it.get("text"),
+                            it.get("meta", {}),
                             it.get("created_at"),
                         ),
                     )
