@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 from .config import get_settings
-from .db import init_db
+from .db import init_db, create_vector_index
 from .curation.x_client import ingest_from_accounts
 from .embedding.embedding import embed_new_items
 from .generation.generator import generate_and_store
@@ -65,6 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--tz", default="US/Eastern")
     s.set_defaults(func=cmd_publish)
 
+    s = sub.add_parser("create-index", help="Create vector index on embeddings (hnsw/ivfflat)")
+    s.add_argument("--type", choices=["hnsw", "ivfflat"], default="hnsw")
+    def _cmd_create_index(args: argparse.Namespace) -> None:
+        create_vector_index(args.type)
+        logger.info("index_created", extra={"type": args.type})
+    s.set_defaults(func=_cmd_create_index)
+
     return p
 
 
@@ -76,4 +83,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
