@@ -22,6 +22,7 @@ class Settings:
 
     # X API (read)
     x_bearer_token: Optional[str]
+    x_api_base: str
 
     # X API (write) – user context
     x_api_key: Optional[str]
@@ -48,6 +49,7 @@ def get_settings() -> Settings:
         database_url=os.getenv("DATABASE_URL", "postgresql://localhost/e_brain"),
         embedding_dim=int(os.getenv("EMBEDDING_DIM", "1536")),
         x_bearer_token=os.getenv("X_BEARER_TOKEN"),
+        x_api_base=os.getenv("X_API_BASE", "api.x.com"),
         x_api_key=os.getenv("X_API_KEY"),
         x_api_secret=os.getenv("X_API_SECRET"),
         x_access_token=os.getenv("X_ACCESS_TOKEN"),
@@ -55,4 +57,3 @@ def get_settings() -> Settings:
         post_windows_us=os.getenv("POST_WINDOWS_US", "09:00-12:00,17:00-19:00"),
         post_windows_eu=os.getenv("POST_WINDOWS_EU", "08:00-11:00,18:00-20:00"),
     )
-

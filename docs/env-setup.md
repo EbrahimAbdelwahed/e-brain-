@@ -78,6 +78,7 @@ Read-only ingestion (required for `ingest-x`)
 - In the X (Twitter) developer portal, create a Project + App.
 - Generate App-only Bearer token (OAuth 2.0) and put in `.env`:
   - `X_BEARER_TOKEN=...`
+- API host: defaults to `api.x.com` (configurable via `X_API_BASE`).
 - The app calls these v2 endpoints:
   - `GET /2/users/by/username/:username`
   - `GET /2/users/:id/tweets?tweet.fields=created_at,author_id,text`
