@@ -1,0 +1,7 @@
+# Add terms to block. One per line.
+nsfw
+explicit
+violence
+politics
+hate
+slur

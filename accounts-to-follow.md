@@ -1,0 +1,20 @@
+Below is a curated list of active X accounts that regularly post about interesting brain facts. These accounts cover a range of topics, including common knowledge (e.g., basic brain functions and myths), niche arguments (e.g., debates on consciousness or neuroplasticity), recent findings (e.g., new studies on neural networks or memory), core neuroscientific theories and concepts (e.g., synaptic plasticity, predictive coding), and computational neuroscience (e.g., modeling brain activity or AI-brain parallels). I focused on accounts that are verified as active based on recent posting history (within the last few months as of August 2025), with exact handles provided. The list is organized alphabetically for ease, with a brief description of each account's focus and typical content.
+
+| Account Handle | Description |
+|---------------|-------------|
+| @BernsteinNeuro | Focuses on computational neuroscience, sharing research on neural modeling, brain function integration, and interdisciplinary approaches; posts about theories like predictive processing and experimental models. |
+| @Brain_Facts_org | Dedicated to brain facts, myths, and education; covers common knowledge (e.g., sleep's role in memory) and recent findings (e.g., neuroplasticity studies), often with infographics and accessible explanations. |
+| @BritishNeuro | Represents the British Neuroscience Association; shares updates on core theories (e.g., synaptic transmission), recent UK-based findings, and niche debates in neurology and brain health. |
+| @caseyalbin | Neurointensivist sharing critical care neuroscience facts, recent clinical findings (e.g., stroke recovery), and concepts like brain trauma responses; mixes professional insights with educational threads. |
+| @Chaos2Cured | Explores novel brain concepts like "Echo Threshold" in memory and consciousness; blends computational ideas, neurodivergence facts, and niche arguments on quantum effects in the brain. |
+| @drmichaellevin | Bioelectricity and regenerative neuroscience expert; posts on brain-like intelligence in non-neural systems, computational models of cognition, and theories of collective intelligence. |
+| @FrontNeurosci | Frontiers in Neuroscience journal account; highlights open-access papers on recent findings (e.g., neural circuits), core concepts (e.g., neurogenesis), and computational simulations. |
+| @GatsbyUCL | Gatsby Computational Neuroscience Unit; shares advanced posts on machine learning-brain parallels, theories of learning/perception, and niche computational arguments. |
+| @IdoAizenbud | Computational neuroscience PhD student; discusses neuron complexity, biophysical models, and recent preprints on human vs. animal brain differences, with a focus on functional implications. |
+| @KingsIoPPN | Institute of Psychiatry, Psychology & Neuroscience; covers mental health-brain links, core theories (e.g., dopamine pathways), and recent findings in neuroimaging. |
+| @NatureNeuro | Nature Neuroscience journal; posts high-impact research on recent discoveries (e.g., memory encoding), core theories (e.g., cortical mapping), and computational neuroscience. |
+| @Neuro_Skeptic | Skeptical take on neuroscience; debunks myths, analyzes niche arguments (e.g., fMRI limitations), and covers recent findings in psychology and brain science. |
+| @NeuroscienceNew | Highly active aggregator of neuroscience news; daily posts on brain facts, recent studies (e.g., thalamus in consciousness), theories (e.g., predictive processing), and computational topics. |
+| @SfNtweets | Society for Neuroscience; shares broad brain facts, event updates, recent findings (e.g., Alzheimer's research), and core concepts like neural plasticity. |
+| @StuartHameroff | Consciousness and computational neuroscience researcher; discusses quantum theories of the brain (e.g., microtubules), niche debates on anesthesia effects, and recent quantum biology findings. |
+| @URNeuroscience | Del Monte Institute for Neuroscience; posts seminar updates, recent research (e.g., aging brain), and concepts in translational neuroscience. 
