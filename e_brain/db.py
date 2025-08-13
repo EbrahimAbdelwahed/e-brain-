@@ -36,9 +36,10 @@ def init_db() -> None:
     s = get_settings()
     with get_conn() as conn:
         with conn.cursor() as cur:
-            # Ensure extension
+            # Ensure extension (single statement)
             cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-            # Tables
+
+            # Tables (execute as separate statements to avoid multi-command prepare issues)
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sources (
@@ -47,8 +48,12 @@ def init_db() -> None:
                   handle TEXT,        -- for X
                   url TEXT,           -- for RSS
                   meta JSONB DEFAULT '{}'::jsonb
-                );
+                )
+                """
+            )
 
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS raw_items (
                   id BIGSERIAL PRIMARY KEY,
                   source_type TEXT NOT NULL,
@@ -58,13 +63,22 @@ def init_db() -> None:
                   text TEXT NOT NULL,
                   created_at TIMESTAMPTZ NOT NULL,
                   inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
-                );
+                )
+                """
+            )
 
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS embeddings (
                   item_id BIGINT PRIMARY KEY REFERENCES raw_items(id) ON DELETE CASCADE,
                   embedding vector(%s)
-                );
+                )
+                """,
+                (s.embedding_dim,),
+            )
 
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS candidate_posts (
                   id BIGSERIAL PRIMARY KEY,
                   text TEXT NOT NULL,
@@ -72,9 +86,8 @@ def init_db() -> None:
                   status TEXT NOT NULL DEFAULT 'pending', -- pending|approved|posted|rejected
                   reason TEXT,
                   source_item_ids BIGINT[] DEFAULT '{}'
-                );
-                """,
-                (s.embedding_dim,),
+                )
+                """
             )
     logger.info("db_initialized")
 
@@ -213,4 +226,3 @@ def mark_posted(post_id: int) -> None:
             "UPDATE candidate_posts SET status='posted' WHERE id=%s",
             (post_id,),
         )
-
