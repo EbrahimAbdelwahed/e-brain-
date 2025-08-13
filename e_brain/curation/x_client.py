@@ -5,6 +5,8 @@ import json
 import re
 from typing import Iterable, List, Optional
 
+import time
+
 import http.client
 
 from ..config import get_settings
@@ -29,20 +31,69 @@ def _read_accounts_from_markdown(path: str = "accounts-to-follow.md") -> List[st
     return sorted(set(handles))
 
 
-def _x_get(path: str, bearer: str) -> Optional[dict]:
-    # Minimal HTTP GET using stdlib to avoid extra deps; expects JSON response.
-    conn = http.client.HTTPSConnection("api.x.com")
-    headers = {"Authorization": f"Bearer {bearer}"}
-    conn.request("GET", path, headers=headers)
-    resp = conn.getresponse()
-    data = resp.read()
-    if resp.status != 200:
-        logger.error("x_api_error", extra={"status": resp.status, "path": path})
-        return None
-    try:
-        return json.loads(data.decode("utf-8"))
-    except Exception:
-        logger.error("x_api_json_error")
+def _x_get(path: str, bearer: str, *, retries: int = 3) -> Optional[dict]:
+    """GET helper with basic retry and rate-limit backoff.
+
+    - Logs status, host, path, and a body snippet on errors.
+    - Backs off on 429 and 5xx with exponential delay.
+    """
+    s = get_settings()
+    host = s.x_api_base or "api.twitter.com"
+    attempt = 0
+    backoff = 1.0
+    while attempt <= retries:
+        attempt += 1
+        conn = http.client.HTTPSConnection(host, timeout=15)
+        headers = {
+            "Authorization": f"Bearer {bearer}",
+            "User-Agent": "e-brain/ingest (+https://github.com/your-org/e-brain)",
+            "Accept": "application/json",
+        }
+        try:
+            conn.request("GET", path, headers=headers)
+            resp = conn.getresponse()
+            data = resp.read()
+        except Exception as e:
+            logger.error(
+                "x_api_http_error",
+                extra={"error": str(e), "host": host, "path": path, "attempt": attempt},
+            )
+            if attempt > retries:
+                return None
+            time.sleep(backoff)
+            backoff *= 2
+            continue
+
+        if resp.status == 200:
+            try:
+                return json.loads(data.decode("utf-8"))
+            except Exception as e:
+                logger.error("x_api_json_error", extra={"error": str(e)})
+                return None
+
+        body_snip = data.decode("utf-8", errors="ignore")[:500]
+        # Log the error with details
+        logger.error(
+            "x_api_error",
+            extra={
+                "status": resp.status,
+                "host": host,
+                "path": path,
+                "body": body_snip,
+                "attempt": attempt,
+            },
+        )
+        # 429 or 5xx → backoff and retry
+        if resp.status == 429 or 500 <= resp.status < 600:
+            if attempt > retries:
+                return None
+            # Respect Retry-After if present
+            retry_after = resp.headers.get("Retry-After")
+            delay = float(retry_after) if retry_after and retry_after.isdigit() else backoff
+            time.sleep(max(1.0, delay))
+            backoff = min(backoff * 2, 30.0)
+            continue
+        # For 401/403/404 etc., don't keep retrying
         return None
 
 
@@ -69,10 +120,12 @@ def ingest_from_accounts(accounts_md_path: str = "accounts-to-follow.md", max_pe
     handles = _read_accounts_from_markdown(accounts_md_path)
     total_inserted = 0
     for handle in handles:
-        source_id = upsert_source_x(handle)
+        # Resolve user id first to avoid creating source rows for invalid/protected accounts
         uid = _username_to_id(handle, settings.x_bearer_token)
         if not uid:
+            logger.error("x_user_lookup_failed", extra={"handle": handle})
             continue
+        source_id = upsert_source_x(handle)
         tweets = _user_recent_tweets(uid, settings.x_bearer_token, max_results=max_per_account)
         items = []
         for tw in tweets:
@@ -89,6 +142,7 @@ def ingest_from_accounts(accounts_md_path: str = "accounts-to-follow.md", max_pe
                 }
             )
         total_inserted += insert_raw_items(items)
+        # Small pause between accounts to be gentle with rate limits
+        time.sleep(0.3)
     logger.info("ingest_completed", extra={"inserted": total_inserted, "accounts": len(handles)})
     return total_inserted
-

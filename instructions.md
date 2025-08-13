@@ -31,7 +31,20 @@ all`** model.
  5. Moderate output to avoid unsafe or misleading content.
  6. Publish automatically to X using the pipeline defined in `publisher.py`.
 
- ---
+---
+## TROUBLESHOOTING: X Ingestion
+
+- Symptom: repeated `x_api_error` lines while some `raw_items_inserted` appear.
+- Likely causes:
+  - 401/403 due to invalid Bearer token or insufficient API tier (free tier often blocks v2 timeline/user lookups).
+  - 429 rate limiting; too many requests without backoff.
+  - Host mismatch; try `X_API_BASE=api.twitter.com` vs `api.x.com` depending on your app’s availability.
+- What we log now: status, host, path, and a short response body to pinpoint the failure.
+- Quick checks:
+  - Ensure `.env` contains `X_BEARER_TOKEN` (App-only) and matches the project’s access level.
+  - Optionally set `X_API_BASE=api.twitter.com` if you see DNS/404 issues against `api.x.com`.
+  - Run: `python -m e_brain.cli ingest-x --max 1` and inspect the JSON logs for `status` and `body`.
+- Note: A `KeyboardInterrupt` stack in `db.upsert_source_x` just means you pressed Ctrl-C while a DB call was active; it’s not a deadlock.
 
  ## REQUIREMENTS
 
@@ -72,15 +85,28 @@ ded.
 
  ---
 
- ## TECHNICAL CONSTRAINTS
+## TECHNICAL CONSTRAINTS
  - All credentials loaded from `.env`.
 -- All write actions to X must be authorized via a Bearer token in API requests.
 +- All write actions to X must use OAuth user-context tokens (OAuth 2.0 or OAuth
  1.0a) with appropriate scopes.
  - Must respect X API rate limits and ToS.
  - DRY_RUN=true in development until explicitly disabled.
- - Use structured logging with timestamps and context.
- - Code should be modular and testable.
+- Use structured logging with timestamps and context.
+- Code should be modular and testable.
+
+## X API Ingestion – Operational Notes
+- API host: use `api.x.com` for v2 endpoints by default. Configurable via `X_API_BASE`.
+- Endpoints used:
+  - `GET /2/users/by/username/:username`
+  - `GET /2/users/:id/tweets?tweet.fields=created_at,author_id,text`
+- Auth: App-only Bearer token (`X_BEARER_TOKEN`) with Tweet read permissions.
+- Logging: `x_api_error` now includes status, host, path, and a body snippet to aid debugging.
+- Common failures and fixes:
+  - 401/403: invalid or insufficient tier; regenerate token or upgrade access.
+  - 404: invalid username or protected/suspended account.
+  - 429: rate-limited; reduce `--max` or add backoff.
+  - DNS/connectivity: override `X_API_BASE` if X changes domains.
 
  ---
 
