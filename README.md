@@ -12,10 +12,12 @@ Quick Start
 - Generate candidate posts: `python -m e_brain.cli generate --theme general`
 - Publish pending (respects time windows and `DRY_RUN`): `python -m e_brain.cli publish`
 
+Environment & Credentials
+- See `docs/env-setup.md` for a complete guide to configuring Neon + pgvector and X API keys.
+
 Scheduling
 - Use cron to run `python -m e_brain.cli publish` periodically. The command will only post within US/EU windows.
 
 Notes
 - DRY_RUN defaults to true. Set `DRY_RUN=false` to enable posting.
 - Mentions/DM polling is disabled by default.
-
