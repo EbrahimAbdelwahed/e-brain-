@@ -56,7 +56,8 @@ def test_similar_texts_cluster_together(tmp_path):
         upsert_article(conn, a1)
         upsert_article(conn, a2)
         upsert_article(conn, a3)
-    clusters = do_cluster(threshold=10)
+    # A higher Hamming distance maps to a lower Jaccard cutoff; 40 allows ~37.5%% overlap
+    clusters = do_cluster(threshold=40)
     sizes = sorted(len(c["members"]) for c in clusters)
     assert sizes == [1, 2]
 

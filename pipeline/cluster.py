@@ -26,7 +26,11 @@ def cluster(threshold: int = 8, logger: logging.Logger | None = None) -> list[di
     unassigned = set(a["article_id"] for a in arts)
     clusters: list[list[str]] = []
     by_id = {a["article_id"]: a for a in arts}
-    jaccard_threshold = 1.0 / max(threshold, 1)
+    # Map a simhash Hamming distance threshold (0-64) to a Jaccard similarity cutoff.
+    # This preserves the intent of "distance <= threshold" where 0 means identical
+    # and 64 means totally different.
+    dist = max(0, min(threshold, 64))
+    jaccard_threshold = 1.0 - dist / 64.0
 
     while unassigned:
         seed = unassigned.pop()
