@@ -4,15 +4,16 @@ from pipeline.io import Article, db, init_db, upsert_article
 from pipeline.cluster import cluster as do_cluster
 
 
-def test_similar_texts_cluster_together(tmp_path):
+def test_same_canonical_url_cluster_together(tmp_path):
     os.environ["EMBED_OFFLINE"] = "1"
     init_db()
     text1 = "Neural network achieves new accuracy on benchmark using simple method."
     text2 = "A simple method lets a neural network hit new accuracy on the benchmark."
     text3 = "Mice study reveals new circuit in hippocampus."
+    shared_url = "https://example.com/same"
     a1 = Article(
         article_id="a1",
-        canonical_url="https://example.com/a1",
+        canonical_url=shared_url,
         title="NN hits new accuracy",
         byline=None,
         published_at="2025-09-01T00:00:00Z",
@@ -26,7 +27,7 @@ def test_similar_texts_cluster_together(tmp_path):
     )
     a2 = Article(
         article_id="a2",
-        canonical_url="https://example.com/a2",
+        canonical_url=shared_url,
         title="Simple method boosts NN accuracy",
         byline=None,
         published_at="2025-09-01T01:00:00Z",

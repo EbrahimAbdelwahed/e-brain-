@@ -5,7 +5,7 @@ import os
 import random
 from typing import Any, Iterable
 
-from .config import EMBED_DIMS, EMBED_MODEL, EMBED_OFFLINE
+from .config import EMBED_DIMS, EMBED_MODEL
 from .io import db, get_embedding, put_embedding
 
 
@@ -40,7 +40,7 @@ def embed_text(text: str, model: str = EMBED_MODEL, dims: int = EMBED_DIMS) -> l
         return [0.0] * dims
     approx_chunk_chars = 4000  # crude proxy
     chunks = [text[i : i + approx_chunk_chars] for i in range(0, len(text), approx_chunk_chars)]
-    if EMBED_OFFLINE or not os.getenv("OPENAI_API_KEY"):
+    if os.getenv("EMBED_OFFLINE") == "1" or not os.getenv("OPENAI_API_KEY"):
         vecs = [_offline_embed_stub(c, dims=dims) for c in chunks]
     else:
         vecs = _embed_openai_chunks(chunks, model=model)
