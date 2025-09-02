@@ -80,7 +80,10 @@ def cluster(
     dry_run: bool = typer.Option(False),
     log_level: str = typer.Option("INFO"),
     parallel: int = typer.Option(6),
-    threshold: int = typer.Option(8, help="Hamming distance threshold for simhash"),
+    threshold: int = typer.Option(
+        8,
+        help="Max Hamming distance on 64-bit simhash (mapped to Jaccard similarity)",
+    ),
 ):
     """Cluster near-duplicate articles via SimHash."""
     settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
