@@ -98,7 +98,8 @@ def summarize(logger: logging.Logger | None = None) -> list[dict[str, Any]]:
             arts = fetch_articles_by_ids(conn, members)
         map_bullets = [b for a in arts for b in _map_article(a)]
         red_bullets = _reduce_cluster(arts)
-        bullets = red_bullets
+        # Include per-article claim/method bullets after the cluster-level summary
+        bullets = red_bullets + map_bullets
         citations = _citations(arts)
         results.append(
             {

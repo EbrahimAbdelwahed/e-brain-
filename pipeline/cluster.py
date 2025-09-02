@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import itertools
 import logging
 import math
@@ -22,7 +23,8 @@ def simhash64(text: str) -> int:
     # 64-bit simhash on shingles
     bits = [0] * 64
     for sh in _shingles(text):
-        h = hash(sh)
+        # Use deterministic hash for stable clustering across runs
+        h = int(hashlib.md5(sh.encode("utf-8")).hexdigest(), 16)
         for i in range(64):
             bits[i] += 1 if (h >> i) & 1 else -1
     out = 0
