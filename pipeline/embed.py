@@ -53,38 +53,35 @@ def embed_text(text: str, model: str = EMBED_MODEL, dims: int = EMBED_DIMS) -> l
 
 
 def ensure_embeddings_for_hashes(content_hashes: Iterable[str], logger=None) -> int:
-    done = 0
-    # Build a map from content_hash to text via articles if needed
-    from .io import db as _db
-
-    with _db() as conn:
-        # fetch article text per content_hash
-        placeholders = ",".join(["?"] * len(list(content_hashes)))
-        # Re-materialize iterable as list (content_hashes may be generator)
     ch_list = list(dict.fromkeys(content_hashes))
     if not ch_list:
         return 0
-    with db() as conn:
-        if len(ch_list) == 1:
-            where = "content_hash = ?"
-        else:
-            where = f"content_hash IN ({','.join(['?']*len(ch_list))})"
-        cur = conn.execute(f"SELECT content_hash, text FROM articles WHERE {where}", ch_list)
-        text_by_hash = {r["content_hash"]: r["text"] for r in cur.fetchall()}
 
-    for ch in ch_list:
-        with db() as conn:
-            if get_embedding(conn, ch):
-                continue
-        txt = text_by_hash.get(ch)
-        if not txt:
-            continue
-        vec = embed_text(txt)
-        with db() as conn:
+    placeholders = ",".join(["?"] * len(ch_list))
+    with db() as conn:
+        cur = conn.execute(
+            f"SELECT content_hash, text FROM articles WHERE content_hash IN ({placeholders})",
+            ch_list,
+        )
+        text_by_hash = {r["content_hash"]: r["text"] for r in cur.fetchall()}
+        cur = conn.execute(
+            f"SELECT content_hash FROM embeddings WHERE content_hash IN ({placeholders})",
+            ch_list,
+        )
+        existing = {r["content_hash"] for r in cur.fetchall()}
+
+    to_embed = [ch for ch in ch_list if ch not in existing and text_by_hash.get(ch)]
+    if not to_embed:
+        return 0
+
+    done = 0
+    with db() as conn:
+        for ch in to_embed:
+            vec = embed_text(text_by_hash[ch])
             put_embedding(conn, ch, EMBED_MODEL, len(vec), vec)
-        done += 1
-        if logger:
-            logger.debug("Embedded %s", ch[:8])
+            done += 1
+            if logger:
+                logger.debug("Embedded %s", ch[:8])
     return done
 
 
