@@ -184,25 +184,41 @@ class Article:
 
 def upsert_article(conn: sqlite3.Connection, article: Article) -> None:
     with _lock:
-        conn.execute(
-            """
-            INSERT INTO articles(article_id, canonical_url, title, byline, published_at, source_id, is_preprint, text, lang, tags, extraction_quality, content_hash)
-            VALUES(:article_id,:canonical_url,:title,:byline,:published_at,:source_id,:is_preprint,:text,:lang,:tags,:extraction_quality,:content_hash)
-            ON CONFLICT(article_id) DO UPDATE SET
-                canonical_url=excluded.canonical_url,
-                title=excluded.title,
-                byline=excluded.byline,
-                published_at=excluded.published_at,
-                source_id=excluded.source_id,
-                is_preprint=excluded.is_preprint,
-                text=excluded.text,
-                lang=excluded.lang,
-                tags=excluded.tags,
-                extraction_quality=excluded.extraction_quality,
-                content_hash=excluded.content_hash
-            """,
-            asdict(article),
-        )
+        # Avoid raising an IntegrityError for duplicate content by checking the
+        # unique ``content_hash`` ahead of time. This prevents noisy tracebacks
+        # when different feeds return the same article text.
+        if conn.execute(
+            "SELECT 1 FROM articles WHERE content_hash=?",
+            (article.content_hash,),
+        ).fetchone():
+            # An article with identical content already exists; skip insert.
+            return
+        try:
+            conn.execute(
+                """
+                INSERT INTO articles(article_id, canonical_url, title, byline, published_at, source_id, is_preprint, text, lang, tags, extraction_quality, content_hash)
+                VALUES(:article_id,:canonical_url,:title,:byline,:published_at,:source_id,:is_preprint,:text,:lang,:tags,:extraction_quality,:content_hash)
+                ON CONFLICT(article_id) DO UPDATE SET
+                    canonical_url=excluded.canonical_url,
+                    title=excluded.title,
+                    byline=excluded.byline,
+                    published_at=excluded.published_at,
+                    source_id=excluded.source_id,
+                    is_preprint=excluded.is_preprint,
+                    text=excluded.text,
+                    lang=excluded.lang,
+                    tags=excluded.tags,
+                    extraction_quality=excluded.extraction_quality,
+                    content_hash=excluded.content_hash
+                """,
+                asdict(article),
+            )
+        except sqlite3.IntegrityError as e:
+            # A race condition may still trigger a UNIQUE constraint violation
+            # on ``content_hash``. Swallow this specific error so callers don't
+            # have to handle duplicates themselves.
+            if "content_hash" not in str(e):
+                raise
 
 
 def fetch_articles(conn: sqlite3.Connection) -> list[dict[str, Any]]:
