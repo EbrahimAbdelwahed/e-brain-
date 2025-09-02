@@ -33,3 +33,5 @@ dev = [
 addopts = "-q"
 pythonpath = ["."]
 
+[tool.setuptools]
+packages = ['pipeline']
