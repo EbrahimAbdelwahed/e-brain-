@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "e-brain-bot-pipeline"
+version = "0.1.0"
+description = "Neuroscience/AI news pipeline: ingest, extract, cluster, embed, summarize, publish"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [
+  { name = "E-Brain Bot", email = "noreply@example.com" }
+]
+dependencies = [
+  "feedparser>=6.0.11",
+  "trafilatura>=1.8.0",
+  "typer>=0.12.3",
+  "requests>=2.31.0",
+  "tenacity>=8.3.0",
+  "python-dotenv>=1.0.1",
+  "url-normalize>=1.4.3",
+  "PyYAML>=6.0.1",
+  "openai>=1.30.5",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4.4",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["."]
+
