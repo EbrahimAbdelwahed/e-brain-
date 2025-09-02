@@ -111,17 +111,7 @@ def summarize_cmd(
     logger.info("Summarize done in %.2fs", dt)
 
 
-@app.command()
-def publish(
-    out: Optional[Path] = typer.Option(None),
-    since: Optional[str] = typer.Option(None),
-    max_items: Optional[int] = typer.Option(None),
-    dry_run: bool = typer.Option(False),
-    log_level: str = typer.Option("INFO"),
-    parallel: int = typer.Option(6),
-):
-    """Publish ranked summaries and artifacts to the run folder."""
-    settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
+def _publish_internal(settings: CLISettings) -> None:
     logger = setup_logging(settings.out_dir, settings.log_level)
     init_db()
     t0 = time.time()
@@ -129,7 +119,11 @@ def publish(
     scores = score_clusters()
     score_map = {s["cluster_id"]: s for s in scores}
     # Order summaries by score
-    summaries_sorted = sorted(summaries, key=lambda x: score_map.get(x["cluster_id"], {}).get("score", 0.0), reverse=True)
+    summaries_sorted = sorted(
+        summaries,
+        key=lambda x: score_map.get(x["cluster_id"], {}).get("score", 0.0),
+        reverse=True,
+    )
 
     # Write clusters.json (summaries with scores)
     clusters_json = settings.out_dir / "clusters.json"
@@ -146,14 +140,20 @@ def publish(
     md_lines = ["# E‑Brain Bot Summaries\n"]
     for s in summaries_sorted:
         sc = score_map.get(s["cluster_id"], {"score": 0.0, "size": 0})
-        md_lines.append(f"\n## Cluster {s['cluster_id']} — score {sc['score']:.3f}, size {sc['size']}")
+        md_lines.append(
+            f"\n## Cluster {s['cluster_id']} — score {sc['score']:.3f}, size {sc['size']}"
+        )
         for b in s["bullets"]:
             md_lines.append(f"- {b}")
         md_lines.append("\nCitations:")
         for c in s["citations"]:
-            md_lines.append(f"- [{c['title']}]({c['url']}) — {c['outlet']} — {c['date']}")
+            md_lines.append(
+                f"- [{c['title']}]({c['url']}) — {c['outlet']} — {c['date']}"
+            )
     if not settings.dry_run:
-        (settings.out_dir / "summaries.md").write_text("\n".join(md_lines), encoding="utf-8")
+        (settings.out_dir / "summaries.md").write_text(
+            "\n".join(md_lines), encoding="utf-8"
+        )
 
     # Run report
     report = {
@@ -163,8 +163,24 @@ def publish(
         "rate_limit": {"per_host_rps": 2.0},
     }
     if not settings.dry_run:
-        (settings.out_dir / "run_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        (settings.out_dir / "run_report.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8"
+        )
     logger.info("Publish done in %.2fs -> %s", time.time() - t0, settings.out_dir)
+
+
+@app.command()
+def publish(
+    out: Optional[Path] = typer.Option(None),
+    since: Optional[str] = typer.Option(None),
+    max_items: Optional[int] = typer.Option(None),
+    dry_run: bool = typer.Option(False),
+    log_level: str = typer.Option("INFO"),
+    parallel: int = typer.Option(6),
+):
+    """Publish ranked summaries and artifacts to the run folder."""
+    settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
+    _publish_internal(settings)
 
 
 @app.command("all")
@@ -184,7 +200,7 @@ def run_all(
     fetch_feeds(since=settings.since, max_items=settings.max_items, logger=logger)
     extract_step(limit=settings.max_items, parallel=settings.parallel, logger=logger)
     cluster_step(logger=logger)
-    publish(out=settings.out_dir, since=since, max_items=max_items, dry_run=dry_run, log_level=log_level, parallel=parallel)
+    _publish_internal(settings)
     logger.info("All done in %.2fs", time.time() - t0)
 
 

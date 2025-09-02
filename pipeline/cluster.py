@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import difflib
+import hashlib
 import itertools
 import logging
 import math
@@ -19,12 +21,13 @@ def _shingles(text: str, k: int = 4) -> list[str]:
 
 
 def simhash64(text: str) -> int:
-    # 64-bit simhash on shingles
+    # 64-bit simhash on shingles using deterministic hashing
     bits = [0] * 64
     for sh in _shingles(text):
-        h = hash(sh)
+        h = hashlib.blake2b(sh.encode("utf-8"), digest_size=8)
+        hv = int.from_bytes(h.digest(), "big")
         for i in range(64):
-            bits[i] += 1 if (h >> i) & 1 else -1
+            bits[i] += 1 if (hv >> i) & 1 else -1
     out = 0
     for i, b in enumerate(bits):
         if b > 0:
@@ -71,7 +74,11 @@ def cluster(threshold: int = 8, logger: logging.Logger | None = None) -> list[di
                 unassigned.remove(aid)
                 continue
             dist = hamming64(seed_sim, sims[aid])
-            if dist <= threshold:
+            if dist <= threshold or difflib.SequenceMatcher(
+                None,
+                by_id[seed].get("text") or "",
+                by_id[aid].get("text") or "",
+            ).ratio() > 0.6:
                 group.append(aid)
                 unassigned.remove(aid)
         clusters.append(group)
