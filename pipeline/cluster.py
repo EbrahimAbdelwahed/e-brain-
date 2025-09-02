@@ -1,39 +1,11 @@
 from __future__ import annotations
 
-import itertools
 import logging
-import math
 import uuid
-from collections import defaultdict
 from typing import Any
 
 from .embed import ensure_embeddings_for_hashes, get_embedding_vector
 from .io import db, fetch_articles, put_cluster, put_cluster_members
-
-
-def _shingles(text: str, k: int = 4) -> list[str]:
-    words = [w for w in text.lower().split() if w]
-    if len(words) <= k:
-        return [" ".join(words)] if words else []
-    return [" ".join(words[i : i + k]) for i in range(len(words) - k + 1)]
-
-
-def simhash64(text: str) -> int:
-    # 64-bit simhash on shingles
-    bits = [0] * 64
-    for sh in _shingles(text):
-        h = hash(sh)
-        for i in range(64):
-            bits[i] += 1 if (h >> i) & 1 else -1
-    out = 0
-    for i, b in enumerate(bits):
-        if b > 0:
-            out |= 1 << i
-    return out
-
-
-def hamming64(a: int, b: int) -> int:
-    return ((a ^ b).bit_count())
 
 
 def _representative(article_list: list[dict[str, Any]]) -> dict[str, Any]:
@@ -49,20 +21,17 @@ def cluster(threshold: int = 8, logger: logging.Logger | None = None) -> list[di
             logger.info("No articles to cluster.")
         return []
 
-    # Precompute simhash for each article
-    sims: dict[str, int] = {}
-    for a in arts:
-        sims[a["article_id"]] = simhash64(a.get("text") or "")
-
-    # Greedy clustering by hamming distance and canonical URL equality
+    # Greedy clustering by Jaccard similarity and canonical URL equality
+    word_sets = {a["article_id"]: set((a.get("text") or "").lower().split()) for a in arts}
     unassigned = set(a["article_id"] for a in arts)
     clusters: list[list[str]] = []
     by_id = {a["article_id"]: a for a in arts}
+    jaccard_threshold = 1.0 / max(threshold, 1)
 
     while unassigned:
         seed = unassigned.pop()
         group = [seed]
-        seed_sim = sims[seed]
+        seed_words = word_sets.get(seed, set())
         seed_url = by_id[seed].get("canonical_url")
         to_check = list(unassigned)
         for aid in to_check:
@@ -70,8 +39,12 @@ def cluster(threshold: int = 8, logger: logging.Logger | None = None) -> list[di
                 group.append(aid)
                 unassigned.remove(aid)
                 continue
-            dist = hamming64(seed_sim, sims[aid])
-            if dist <= threshold:
+            words = word_sets.get(aid, set())
+            if not seed_words or not words:
+                continue
+            inter = len(seed_words & words)
+            union = len(seed_words | words)
+            if union and inter / union >= jaccard_threshold:
                 group.append(aid)
                 unassigned.remove(aid)
         clusters.append(group)
