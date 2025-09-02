@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from urllib.parse import urlparse
 from typing import Any
 
 import trafilatura
@@ -12,7 +14,14 @@ from .normalize import canonicalize_url, clean_text, content_hash, is_preprint_s
 
 
 def _extract_from_url(url: str) -> tuple[str | None, dict[str, Any] | None]:
-    downloaded = trafilatura.fetch_url(url)
+    # Support local fixtures: file:// path -> read bytes and pass to trafilatura
+    if url.startswith("file://"):
+        p = Path(urlparse(url).path)
+        if not p.exists():
+            return None, None
+        downloaded = p.read_text(encoding="utf-8", errors="ignore")
+    else:
+        downloaded = trafilatura.fetch_url(url)
     if not downloaded:
         return None, None
     data_json = trafilatura.extract(downloaded, include_links=False, output="json")
@@ -40,8 +49,6 @@ def extract(limit: int | None = None, parallel: int = 4, logger: logging.Logger 
     def worker(raw: dict[str, Any]) -> int:
         url = raw.get("link") or ""
         text, meta = _extract_from_url(url)
-        if not text:
-            return 0
         canonical = None
         if meta:
             canonical = meta.get("url") or meta.get("source") or None
@@ -54,11 +61,22 @@ def extract(limit: int | None = None, parallel: int = 4, logger: logging.Logger 
         if meta and meta.get("date"):
             published = meta["date"]
         published = parse_date(published)
+        # Fallback: if no extracted text, build from feed title+summary
+        if not text:
+            fallback = clean_text(((raw.get("title") or "") + "\n" + (raw.get("summary") or "")).strip())
+            if not fallback:
+                if logger:
+                    logger.info("Skip: no extract and no fallback for %s", url)
+                return 0
+            text = fallback
+            quality = 0.2
+        else:
+            quality = min(1.0, max(0.0, len(text) / 2000))
         txt = clean_text(text)
-        chash = content_hash(txt)
         is_preprint = 1 if is_preprint_source(raw.get("source_id"), canonical) else 0
         lang = (meta.get("language") if meta else None)
-        quality = min(1.0, max(0.0, len(txt) / 2000))  # crude proxy
+        # content hash over canonical+title+text for determinism
+        chash = content_hash("\n".join([title or "", txt or "", canonical or ""]))
         art = Article(
             article_id=chash[:16],
             canonical_url=canonical,
@@ -88,4 +106,3 @@ def extract(limit: int | None = None, parallel: int = 4, logger: logging.Logger 
     if logger:
         logger.info("Extracted %d articles", count)
     return count
-

@@ -1,0 +1,36 @@
+2025-09-02 19:54:24 | INFO | pipeline | Run directory: pipeline_runs\2025-09-02T17-54-24Z
+2025-09-02 19:54:25 | INFO | pipeline | Fetched arxiv-cs-ne (200)
+2025-09-02 19:54:25 | INFO | pipeline | arxiv-cs-ne: 0 new raw entries
+2025-09-02 19:54:25 | INFO | pipeline | Fetched arxiv-cs-lg (200)
+2025-09-02 19:54:25 | INFO | pipeline | arxiv-cs-lg: 0 new raw entries
+2025-09-02 19:54:26 | INFO | pipeline | Fetched arxiv-q-bio-nc (200)
+2025-09-02 19:54:26 | INFO | pipeline | arxiv-q-bio-nc: 0 new raw entries
+2025-09-02 19:54:27 | ERROR | pipeline | HTTP error: 403 Forbidden url=https://www.biorxiv.org/collection/neuroscience/rss.xml final=https://www.biorxiv.org/collection/neuroscience/rss.xml
+2025-09-02 19:54:29 | ERROR | pipeline | HTTP error: 403 Forbidden url=https://www.biorxiv.org/collection/neuroscience/rss.xml final=https://www.biorxiv.org/collection/neuroscience/rss.xml
+2025-09-02 19:54:32 | ERROR | pipeline | HTTP error: 403 Forbidden url=https://www.biorxiv.org/collection/neuroscience/rss.xml final=https://www.biorxiv.org/collection/neuroscience/rss.xml
+2025-09-02 19:54:32 | ERROR | pipeline | Failed to fetch biorxiv-neuro: RetryError[<Future at 0x29e13efd4d0 state=finished raised HTTPError>]
+2025-09-02 19:54:33 | INFO | pipeline | Fetched nature-neuroscience (200)
+2025-09-02 19:54:33 | INFO | pipeline | nature-neuroscience: 2 new raw entries
+2025-09-02 19:54:35 | ERROR | pipeline | HTTP error: 404 Not Found url=https://elifesciences.org/subjects/neuroscience/rss.xml final=https://elifesciences.org/subjects/neuroscience/rss.xml
+2025-09-02 19:54:36 | ERROR | pipeline | HTTP error: 404 Not Found url=https://elifesciences.org/subjects/neuroscience/rss.xml final=https://elifesciences.org/subjects/neuroscience/rss.xml
+2025-09-02 19:54:39 | ERROR | pipeline | HTTP error: 404 Not Found url=https://elifesciences.org/subjects/neuroscience/rss.xml final=https://elifesciences.org/subjects/neuroscience/rss.xml
+2025-09-02 19:54:39 | ERROR | pipeline | Failed to fetch elife-neuroscience: RetryError[<Future at 0x29e15272810 state=finished raised HTTPError>]
+2025-09-02 19:54:40 | ERROR | pipeline | HTTP error: 410  url=https://www.pnas.org/rss/subject/neuroscience.xml final=https://www.pnas.org/rss/subject/neuroscience.xml
+2025-09-02 19:54:42 | ERROR | pipeline | HTTP error: 410  url=https://www.pnas.org/rss/subject/neuroscience.xml final=https://www.pnas.org/rss/subject/neuroscience.xml
+2025-09-02 19:54:45 | ERROR | pipeline | HTTP error: 410  url=https://www.pnas.org/rss/subject/neuroscience.xml final=https://www.pnas.org/rss/subject/neuroscience.xml
+2025-09-02 19:54:45 | ERROR | pipeline | Failed to fetch pnas-neuroscience: RetryError[<Future at 0x29e1527db10 state=finished raised HTTPError>]
+2025-09-02 19:54:45 | ERROR | pipeline | HTTP request failed: HTTPSConnectionPool(host='directorsblog.nih.gov', port=443): Max retries exceeded with url: /feed/ (Caused by SSLError(SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'directorsblog.nih.gov'. (_ssl.c:1006)")))
+2025-09-02 19:54:47 | ERROR | pipeline | HTTP request failed: HTTPSConnectionPool(host='directorsblog.nih.gov', port=443): Max retries exceeded with url: /feed/ (Caused by SSLError(SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'directorsblog.nih.gov'. (_ssl.c:1006)")))
+2025-09-02 19:54:49 | ERROR | pipeline | HTTP request failed: HTTPSConnectionPool(host='directorsblog.nih.gov', port=443): Max retries exceeded with url: /feed/ (Caused by SSLError(SSLCertVerificationError(1, "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'directorsblog.nih.gov'. (_ssl.c:1006)")))
+2025-09-02 19:54:49 | ERROR | pipeline | Failed to fetch nih-director-blog: RetryError[<Future at 0x29e15292b10 state=finished raised SSLError>]
+2025-09-02 19:54:50 | ERROR | pipeline | HTTP error: 404 Not Found url=https://www.technologyreview.com/feed/tag/artificial-intelligence/ final=https://www.technologyreview.com/feed/tag/artificial-intelligence/
+2025-09-02 19:54:52 | ERROR | pipeline | HTTP error: 404 Not Found url=https://www.technologyreview.com/feed/tag/artificial-intelligence/ final=https://www.technologyreview.com/feed/tag/artificial-intelligence/
+2025-09-02 19:54:54 | ERROR | pipeline | HTTP error: 404 Not Found url=https://www.technologyreview.com/feed/tag/artificial-intelligence/ final=https://www.technologyreview.com/feed/tag/artificial-intelligence/
+2025-09-02 19:54:54 | ERROR | pipeline | Failed to fetch mit-techreview-ai: RetryError[<Future at 0x29e15293ad0 state=finished raised HTTPError>]
+2025-09-02 19:54:54 | INFO | pipeline | Fetch: 9 feeds, 2 new entries
+2025-09-02 19:54:56 | INFO | pipeline | Extracted 2 articles
+2025-09-02 19:54:56 | INFO | pipeline | Extract: 2 articles
+2025-09-02 19:54:56 | INFO | pipeline | Created 2 clusters
+2025-09-02 19:54:56 | INFO | pipeline | Cluster: 2 clusters
+2025-09-02 19:54:56 | INFO | pipeline | Summarized 2 clusters
+2025-09-02 19:54:56 | INFO | pipeline | All done in 31.61s

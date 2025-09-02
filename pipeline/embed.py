@@ -5,7 +5,7 @@ import os
 import random
 from typing import Any, Iterable
 
-from .config import EMBED_DIMS, EMBED_MODEL, EMBED_OFFLINE
+from .config import EMBED_DIMS, EMBED_MODEL
 from .io import db, get_embedding, put_embedding
 
 
@@ -40,7 +40,9 @@ def embed_text(text: str, model: str = EMBED_MODEL, dims: int = EMBED_DIMS) -> l
         return [0.0] * dims
     approx_chunk_chars = 4000  # crude proxy
     chunks = [text[i : i + approx_chunk_chars] for i in range(0, len(text), approx_chunk_chars)]
-    if EMBED_OFFLINE or not os.getenv("OPENAI_API_KEY"):
+    # Read offline flag at call time to honor tests
+    offline = os.getenv("EMBED_OFFLINE", "0") == "1"
+    if offline or not os.getenv("OPENAI_API_KEY"):
         vecs = [_offline_embed_stub(c, dims=dims) for c in chunks]
     else:
         vecs = _embed_openai_chunks(chunks, model=model)
@@ -54,13 +56,7 @@ def embed_text(text: str, model: str = EMBED_MODEL, dims: int = EMBED_DIMS) -> l
 
 def ensure_embeddings_for_hashes(content_hashes: Iterable[str], logger=None) -> int:
     done = 0
-    # Build a map from content_hash to text via articles if needed
-    from .io import db as _db
-
-    with _db() as conn:
-        # fetch article text per content_hash
-        placeholders = ",".join(["?"] * len(list(content_hashes)))
-        # Re-materialize iterable as list (content_hashes may be generator)
+    # Re-materialize iterable as list (content_hashes may be generator)
     ch_list = list(dict.fromkeys(content_hashes))
     if not ch_list:
         return 0
@@ -98,4 +94,3 @@ def get_embedding_vector(conn, content_hash: str | None) -> list[float] | None:
         return [float(x) for x in (row["vector"] and __import__("json").loads(row["vector"]))]
     except Exception:  # noqa: BLE001
         return None
-

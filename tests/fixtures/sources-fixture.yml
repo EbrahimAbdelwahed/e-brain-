@@ -1,0 +1,7 @@
+sources:
+  - id: fixture-feed-1
+    weight: 1
+    url: file://tests/fixtures/rss/feed1.xml
+  - id: fixture-feed-2
+    weight: 1
+    url: file://tests/fixtures/rss/feed2.xml

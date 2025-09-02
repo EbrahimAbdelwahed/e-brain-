@@ -4,13 +4,18 @@ import json
 import os
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Tuple
 
-from .config import DB_PATH, ensure_dirs
+import requests
+import certifi
+from tenacity import retry, stop_after_attempt, wait_exponential_jitter, RetryError
+
+from .config import DB_PATH, ensure_dirs, DEFAULT_RPS_PER_HOST, ROOT
 
 
 _lock = threading.Lock()
@@ -45,6 +50,12 @@ def init_db() -> None:
         c.executescript(
             """
             PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS http_cache (
+                url TEXT PRIMARY KEY,
+                etag TEXT,
+                last_modified TEXT,
+                updated_at TEXT
+            );
             CREATE TABLE IF NOT EXISTS feeds (
                 feed_url TEXT PRIMARY KEY,
                 source_id TEXT,
@@ -103,6 +114,124 @@ def init_db() -> None:
             );
             """
         )
+
+
+# HTTP cache helpers
+def get_http_cache(conn: sqlite3.Connection, url: str) -> tuple[str | None, str | None]:
+    cur = conn.execute("SELECT etag, last_modified FROM http_cache WHERE url=?", (url,))
+    row = cur.fetchone()
+    if not row:
+        return None, None
+    return row.get("etag"), row.get("last_modified")
+
+
+def upsert_http_cache(conn: sqlite3.Connection, url: str, etag: str | None, last_modified: str | None) -> None:
+    with _lock:
+        conn.execute(
+            """
+            INSERT INTO http_cache(url, etag, last_modified, updated_at)
+            VALUES(?,?,?,?)
+            ON CONFLICT(url) DO UPDATE SET etag=excluded.etag, last_modified=excluded.last_modified, updated_at=excluded.updated_at
+            """,
+            (url, etag, last_modified, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")),
+        )
+
+
+_session_lock = threading.Lock()
+_session: requests.Session | None = None
+_last_req_ts: dict[str, float] = {}
+_min_interval = 1.0 / max(0.1, DEFAULT_RPS_PER_HOST)
+
+
+def _rate_limit(url: str) -> None:
+    host = requests.utils.urlparse(url).hostname or ""
+    now = time.monotonic()
+    last = _last_req_ts.get(host, 0.0)
+    delta = now - last
+    if delta < _min_interval:
+        time.sleep(_min_interval - delta)
+    _last_req_ts[host] = time.monotonic()
+
+
+def get_http_session() -> requests.Session:
+    global _session
+    if _session is not None:
+        return _session
+    with _session_lock:
+        if _session is None:
+            s = requests.Session()
+            s.headers.update(
+                {
+                    "User-Agent": "e-brain-bot/0.1 (+https://github.com/EbrahimAbdelwahed/e-brain-bot)",
+                    "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8",
+                }
+            )
+            _session = s
+    return _session  # type: ignore[return-value]
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential_jitter(1, 4))
+def http_get_bytes(url: str, logger=None) -> Tuple[int, bytes | None, dict[str, str]]:
+    """GET a URL with conditional headers + caching.
+
+    Returns: (status_code, content or None, response_headers)
+    On 304 Not Modified, returns (304, None, headers).
+    """
+    # Fixtures/local files support
+    if url.startswith("file://"):
+        parsed = requests.utils.urlparse(url)
+        # file://<netloc>/<path>
+        if parsed.netloc and parsed.netloc not in {"localhost"}:
+            # Treat netloc as first path component (fixture-like)
+            p = ROOT / parsed.netloc / parsed.path.lstrip("/")
+        else:
+            p = Path(parsed.path)
+            # On Windows, a leading '/C:/' may appear; normalize
+            if p.drive and parsed.path.startswith("/"):
+                p = Path(parsed.path[1:])
+            if not p.is_absolute():
+                p = ROOT / parsed.path.lstrip("/")
+        data = p.read_bytes()
+        return 200, data, {}
+
+    s = get_http_session()
+    _rate_limit(url)
+    headers: dict[str, str] = {}
+    with db() as conn:
+        etag, last_mod = get_http_cache(conn, url)
+    if etag:
+        headers["If-None-Match"] = etag
+    if last_mod:
+        headers["If-Modified-Since"] = last_mod
+    try:
+        resp = s.get(url, headers=headers, timeout=10, allow_redirects=True, verify=certifi.where())
+    except requests.RequestException as e:  # network or TLS errors
+        if logger:
+            logger.error("HTTP request failed: %s", e)
+        raise
+    # 304 short-circuit
+    if resp.status_code == 304:
+        if logger:
+            logger.info("HTTP 304 Not Modified: %s", resp.url)
+        return 304, None, dict(resp.headers)
+    # Raise for other non-OK
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        if logger:
+            logger.error(
+                "HTTP error: %s %s url=%s final=%s",
+                resp.status_code,
+                resp.reason,
+                url,
+                resp.url,
+            )
+        raise
+
+    # Update cache on 200
+    with db() as conn:
+        upsert_http_cache(conn, url, resp.headers.get("ETag"), resp.headers.get("Last-Modified"))
+    return resp.status_code, resp.content, dict(resp.headers)
 
 
 # Feed cache
@@ -266,4 +395,3 @@ def fetch_clusters(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 def fetch_cluster_members(conn: sqlite3.Connection, cluster_id: str) -> list[str]:
     cur = conn.execute("SELECT article_id FROM cluster_members WHERE cluster_id=?", (cluster_id,))
     return [r["article_id"] for r in cur.fetchall()]
-

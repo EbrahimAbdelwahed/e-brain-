@@ -1,11 +1,14 @@
 import os
 
 from pipeline.io import Article, db, init_db, upsert_article
+from pipeline.config import DB_PATH
 from pipeline.cluster import cluster as do_cluster
 
 
 def test_similar_texts_cluster_together(tmp_path):
     os.environ["EMBED_OFFLINE"] = "1"
+    if DB_PATH.exists():
+        DB_PATH.unlink()
     init_db()
     text1 = "Neural network achieves new accuracy on benchmark using simple method."
     text2 = "A simple method lets a neural network hit new accuracy on the benchmark."
@@ -59,4 +62,3 @@ def test_similar_texts_cluster_together(tmp_path):
     clusters = do_cluster(threshold=10)
     sizes = sorted(len(c["members"]) for c in clusters)
     assert sizes == [1, 2]
-

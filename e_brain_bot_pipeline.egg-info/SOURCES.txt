@@ -9,6 +9,7 @@ pipeline/__init__.py
 pipeline/__main__.py
 pipeline/cluster.py
 pipeline/config.py
+pipeline/context.py
 pipeline/embed.py
 pipeline/extract.py
 pipeline/ingest.py
@@ -19,4 +20,5 @@ pipeline/rank.py
 pipeline/summarize.py
 tests/test_cluster.py
 tests/test_embed_shape.py
+tests/test_pipeline_fixture.py
 tests/test_url_canon.py

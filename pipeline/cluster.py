@@ -6,12 +6,14 @@ import math
 import uuid
 from collections import defaultdict
 from typing import Any
+import re
 
 from .embed import ensure_embeddings_for_hashes, get_embedding_vector
+import hashlib
 from .io import db, fetch_articles, put_cluster, put_cluster_members
 
 
-def _shingles(text: str, k: int = 4) -> list[str]:
+def _shingles(text: str, k: int = 3) -> list[str]:
     words = [w for w in text.lower().split() if w]
     if len(words) <= k:
         return [" ".join(words)] if words else []
@@ -19,10 +21,10 @@ def _shingles(text: str, k: int = 4) -> list[str]:
 
 
 def simhash64(text: str) -> int:
-    # 64-bit simhash on shingles
+    # 64-bit simhash on shingles using stable md5 hashing for determinism
     bits = [0] * 64
     for sh in _shingles(text):
-        h = hash(sh)
+        h = int.from_bytes(hashlib.md5(sh.encode("utf-8")).digest()[:8], "big")
         for i in range(64):
             bits[i] += 1 if (h >> i) & 1 else -1
     out = 0
@@ -58,6 +60,10 @@ def cluster(threshold: int = 8, logger: logging.Logger | None = None) -> list[di
     unassigned = set(a["article_id"] for a in arts)
     clusters: list[list[str]] = []
     by_id = {a["article_id"]: a for a in arts}
+    # Precompute token sets for quick Jaccard check
+    def tokens(t: str) -> set[str]:
+        return set(re.findall(r"\w+", (t or "").lower()))
+    tok_sets = {a["article_id"]: tokens(a.get("text") or "") for a in arts}
 
     while unassigned:
         seed = unassigned.pop()
@@ -70,6 +76,15 @@ def cluster(threshold: int = 8, logger: logging.Logger | None = None) -> list[di
                 group.append(aid)
                 unassigned.remove(aid)
                 continue
+            # Jaccard similarity on word sets as a robust fallback
+            s1, s2 = tok_sets[seed], tok_sets[aid]
+            if s1 and s2:
+                inter = len(s1 & s2)
+                union = len(s1 | s2)
+                if union > 0 and (inter / union) >= 0.5:
+                    group.append(aid)
+                    unassigned.remove(aid)
+                    continue
             dist = hamming64(seed_sim, sims[aid])
             if dist <= threshold:
                 group.append(aid)
@@ -104,4 +119,3 @@ def cluster(threshold: int = 8, logger: logging.Logger | None = None) -> list[di
     if logger:
         logger.info("Created %d clusters", len(saved))
     return saved
-

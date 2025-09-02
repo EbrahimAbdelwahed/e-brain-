@@ -1,0 +1,16 @@
+{
+  "counts": {
+    "feeds": 9,
+    "raw_entries": 0,
+    "raw_inserted": 0,
+    "articles_extracted": 4,
+    "clusters": 4
+  },
+  "durations": {
+    "fetch_sec": 28.229581356048584,
+    "extract_sec": 1.665125846862793,
+    "cluster_sec": 7.758051633834839,
+    "publish_sec": 0.057279348373413086,
+    "total_sec": 37.71630239486694
+  }
+}

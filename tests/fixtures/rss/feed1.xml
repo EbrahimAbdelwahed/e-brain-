@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Fixture Feed 1</title>
+    <link>https://example.com/fixture1</link>
+    <description>Test feed 1</description>
+    <item>
+      <title>New neural method improves accuracy</title>
+      <link>https://example.com/articles/nn-accuracy</link>
+      <guid>fixture1-item1</guid>
+      <pubDate>Mon, 01 Sep 2025 00:00:00 GMT</pubDate>
+      <description>A simple method lets a neural network hit new accuracy on a benchmark.</description>
+    </item>
+  </channel>
+  </rss>

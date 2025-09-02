@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Fixture Feed 2</title>
+    <link>https://example.com/fixture2</link>
+    <description>Test feed 2</description>
+    <item>
+      <title>Study reveals hippocampus circuit</title>
+      <link>https://example.com/articles/hippocampus-circuit</link>
+      <guid>fixture2-item1</guid>
+      <pubDate>Mon, 01 Sep 2025 01:00:00 GMT</pubDate>
+      <description>Mice study reveals new circuit in hippocampus.</description>
+    </item>
+  </channel>
+  </rss>

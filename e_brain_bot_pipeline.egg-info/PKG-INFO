@@ -6,15 +6,16 @@ Author-email: E-Brain Bot <noreply@example.com>
 License: Proprietary
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
-Requires-Dist: feedparser>=6.0.11
-Requires-Dist: trafilatura>=1.8.0
-Requires-Dist: typer>=0.12.3
-Requires-Dist: requests>=2.31.0
-Requires-Dist: tenacity>=8.3.0
-Requires-Dist: python-dotenv>=1.0.1
-Requires-Dist: url-normalize>=1.4.3
-Requires-Dist: PyYAML>=6.0.1
-Requires-Dist: openai>=1.30.5
+Requires-Dist: feedparser==6.0.11
+Requires-Dist: trafilatura==1.9.0
+Requires-Dist: typer==0.12.3
+Requires-Dist: requests==2.32.3
+Requires-Dist: tenacity==8.3.0
+Requires-Dist: python-dotenv==1.0.1
+Requires-Dist: url-normalize==1.4.3
+Requires-Dist: PyYAML==6.0.1
+Requires-Dist: openai==1.30.5
+Requires-Dist: certifi>=2024.2.2
 Provides-Extra: dev
 Requires-Dist: pytest>=7.4.4; extra == "dev"
 
