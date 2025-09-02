@@ -32,7 +32,6 @@ MAX_PARALLEL = int(os.getenv("MAX_PARALLEL", "6"))
 # Embeddings
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
 EMBED_DIMS = int(os.getenv("EMBED_DIMS", "1536"))
-EMBED_OFFLINE = os.getenv("EMBED_OFFLINE", "0") == "1"
 
 
 def ensure_dirs() -> None:
