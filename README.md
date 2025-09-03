@@ -1,6 +1,6 @@
-E‑Brain Bot: Neuroscience/AI News Pipeline
+﻿Eâ€‘Brain Bot: Neuroscience/AI News Pipeline
 
-This is a minimal, end‑to‑end terminal pipeline that ingests neuroscience/AI news from RSS, extracts articles, clusters near‑duplicates, computes embeddings with OpenAI text-embedding-3-small, summarizes clusters with citations in an evidence-first watchdog tone, and publishes ranked outputs to a timestamped folder. No web UI.
+This is a minimal, endâ€‘toâ€‘end terminal pipeline that ingests neuroscience/AI news from RSS, extracts articles, clusters nearâ€‘duplicates, computes embeddings with OpenAI text-embedding-3-small, summarizes clusters with citations in an evidence-first watchdog tone, and publishes ranked outputs to a timestamped folder. No web UI.
 
 Quickstart
 
@@ -22,6 +22,7 @@ CLI
 
 - Commands: `fetch`, `extract`, `cluster`, `summarize`, `publish`, `all`
 - Flags: `--out`, `--since`, `--max-items`, `--dry-run`, `--log-level`, `--parallel`
+- Cluster flags: `--jaccard-threshold` (default 0.85), `--num-perm` (default 128)
 - Example: `python -m pipeline all --out ./pipeline_runs --since 2025-09-01T00:00:00Z --parallel 8`
 
 Outputs (under the run folder)
@@ -40,7 +41,7 @@ Runbook
 
 1) `python -m pipeline fetch --since <ISO8601>`: fetch RSS into SQLite with ETag caching.
 2) `python -m pipeline extract`: extract canonical URLs and article text via trafilatura.
-3) `python -m pipeline cluster`: cluster near-duplicates via SimHash; compute centroids.
+3) `python -m pipeline cluster`: cluster near-duplicates via MinHash/LSH over 5-gram shingles (default Jaccard 0.85); compute centroids.
 4) `python -m pipeline summarize`: produce map/reduce summaries with watchdog tone.
 5) `python -m pipeline publish --out ./pipeline_runs`: write summaries and artifacts.
 6) `python -m pipeline all` runs the above in sequence.
@@ -53,4 +54,10 @@ TODOs (next iteration)
 
 - Optional publishing to social platforms (X), and light web UI.
 - Additional sources and smarter summarization heuristics.
+
+
+Environment (.env) additions
+
+- Optional (DB): DATABASE_URL=postgresql://... (Neon with pgvector)
+- Optional (Observability): LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
 

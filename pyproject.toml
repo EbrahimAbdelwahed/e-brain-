@@ -23,6 +23,7 @@ dependencies = [
   "PyYAML==6.0.1",
   "openai==1.30.5",
   "certifi>=2024.2.2",
+  "datasketch==1.6.5",
 ]
 
 [project.optional-dependencies]

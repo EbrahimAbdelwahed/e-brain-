@@ -88,14 +88,15 @@ def cluster(
     dry_run: bool = typer.Option(False),
     log_level: str = typer.Option("INFO"),
     parallel: int = typer.Option(6),
-    threshold: int = typer.Option(8, help="Hamming distance threshold for simhash"),
+    jaccard_threshold: float = typer.Option(0.85, help="Jaccard threshold for MinHash/LSH grouping"),
+    num_perm: int = typer.Option(128, help="Number of permutations for MinHash"),
 ):
-    """Cluster near-duplicate articles via SimHash."""
+    """Cluster near-duplicate articles via MinHash/LSH (5-gram shingles)."""
     settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
     logger = setup_logging(settings.out_dir, settings.log_level)
     init_db()
     t0 = time.time()
-    cs = cluster_step(threshold=threshold, logger=logger)
+    cs = cluster_step(jaccard_threshold=jaccard_threshold, num_perm=num_perm, logger=logger)
     dt = time.time() - t0
     logger.info("Cluster done in %.2fs: %d clusters", dt, len(cs))
 
