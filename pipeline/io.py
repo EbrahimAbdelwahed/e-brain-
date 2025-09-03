@@ -153,6 +153,28 @@ _session: requests.Session | None = None
 _last_req_ts: dict[str, float] = {}
 _min_interval = 1.0 / max(0.1, DEFAULT_RPS_PER_HOST)
 
+# Per-domain concurrency: at most 1 in-flight request per host
+_host_sem_lock = threading.Lock()
+_host_semaphores: dict[str, threading.Semaphore] = {}
+
+
+def _get_host_semaphore(host: str) -> threading.Semaphore:
+    if not host:
+        # For file:// or malformed, return a dummy semaphore-like object
+        # by using a shared no-op semaphore with large capacity.
+        with _host_sem_lock:
+            sem = _host_semaphores.get("__none__")
+            if sem is None:
+                sem = threading.Semaphore(value=1_000_000)
+                _host_semaphores["__none__"] = sem
+            return sem
+    with _host_sem_lock:
+        sem = _host_semaphores.get(host)
+        if sem is None:
+            sem = threading.Semaphore(value=1)
+            _host_semaphores[host] = sem
+        return sem
+
 
 def _rate_limit(url: str) -> None:
     host = requests.utils.urlparse(url).hostname or ""
@@ -207,6 +229,8 @@ def http_get_bytes(url: str, logger=None) -> Tuple[int, bytes | None, dict[str, 
 
     s = get_http_session()
     _rate_limit(url)
+    host = requests.utils.urlparse(url).hostname or ""
+    sem = _get_host_semaphore(host)
     headers: dict[str, str] = {}
     with db() as conn:
         etag, last_mod = get_http_cache(conn, url)
@@ -215,11 +239,18 @@ def http_get_bytes(url: str, logger=None) -> Tuple[int, bytes | None, dict[str, 
     if last_mod:
         headers["If-Modified-Since"] = last_mod
     try:
-        resp = s.get(url, headers=headers, timeout=10, allow_redirects=True, verify=certifi.where())
-    except requests.RequestException as e:  # network or TLS errors
-        if logger:
-            logger.error("HTTP request failed: %s", e)
-        raise
+        sem.acquire()
+        try:
+            resp = s.get(url, headers=headers, timeout=10, allow_redirects=True, verify=certifi.where())
+        except requests.RequestException as e:  # network or TLS errors
+            if logger:
+                logger.error("HTTP request failed: %s", e)
+            raise
+    finally:
+        try:
+            sem.release()
+        except Exception:
+            pass
     # 304 short-circuit
     if resp.status_code == 304:
         if logger:

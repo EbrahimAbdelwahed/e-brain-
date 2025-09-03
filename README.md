@@ -56,6 +56,12 @@ Testing
 
 - `pytest -q`
 
+Robots Compliance & Fallback
+
+- Extraction consults `robots.txt` for each article URL using the pipeline User-Agent and does not fetch disallowed pages.
+- When robots disallow or an article fetch fails, extraction falls back to the feed title + summary (low quality = 0.2). Output shapes and downstream behavior remain unchanged.
+- HTTP requests (including robots) enforce per-domain concurrency = 1, keep existing RPS throttling, retries with jitter, and use conditional GETs (ETag/Last-Modified) for caching.
+
 TODOs (next iteration)
 
 - Optional publishing to social platforms (X), and light web UI.

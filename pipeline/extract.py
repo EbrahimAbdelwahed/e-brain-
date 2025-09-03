@@ -9,11 +9,12 @@ from typing import Any
 
 import trafilatura
 
-from .io import Article, db, fetch_unextracted_raws, upsert_article
+from .io import Article, db, fetch_unextracted_raws, upsert_article, http_get_bytes, get_http_session
 from .normalize import canonicalize_url, clean_text, content_hash, is_preprint_source, parse_date
+from .robots import robots_allowed
 
 
-def _extract_from_url(url: str) -> tuple[str | None, dict[str, Any] | None]:
+def _extract_from_url(url: str, logger=None) -> tuple[str | None, dict[str, Any] | None]:
     # Support local fixtures: file:// path -> read bytes and pass to trafilatura
     if url.startswith("file://"):
         p = Path(urlparse(url).path)
@@ -21,7 +22,30 @@ def _extract_from_url(url: str) -> tuple[str | None, dict[str, Any] | None]:
             return None, None
         downloaded = p.read_text(encoding="utf-8", errors="ignore")
     else:
-        downloaded = trafilatura.fetch_url(url)
+        # robots.txt compliance + cached HTTP
+        ua = get_http_session().headers.get("User-Agent", "*")
+        try:
+            allowed = robots_allowed(url, ua)
+        except Exception:
+            allowed = True
+        if not allowed:
+            if logger:
+                logger.info("robots: deny fetch for %s", url)
+            return None, None
+        try:
+            status, content, _ = http_get_bytes(url, logger=logger)
+            if logger:
+                logger.info("fetch: %s -> status=%s", url, status)
+        except Exception as e:  # noqa: BLE001
+            if logger:
+                logger.info("fetch error for %s: %s (will fallback)", url, e)
+            return None, None
+        if content is None:
+            return None, None
+        try:
+            downloaded = content.decode("utf-8", errors="ignore")
+        except Exception:
+            return None, None
     if not downloaded:
         return None, None
     data_json = trafilatura.extract(downloaded, include_links=False, output="json")
@@ -48,7 +72,7 @@ def extract(limit: int | None = None, parallel: int = 4, logger: logging.Logger 
 
     def worker(raw: dict[str, Any]) -> int:
         url = raw.get("link") or ""
-        text, meta = _extract_from_url(url)
+        text, meta = _extract_from_url(url, logger=logger)
         canonical = None
         if meta:
             canonical = meta.get("url") or meta.get("source") or None
@@ -70,6 +94,8 @@ def extract(limit: int | None = None, parallel: int = 4, logger: logging.Logger 
                 return 0
             text = fallback
             quality = 0.2
+            if logger:
+                logger.info("fallback used for %s", url)
         else:
             quality = min(1.0, max(0.0, len(text) / 2000))
         txt = clean_text(text)
