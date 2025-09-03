@@ -32,6 +32,12 @@ Outputs (under the run folder)
 - `run_report.json`: counts, durations, failures, rate-limit stats
 - `logs/run.log`: pipeline logs
 
+Summaries Persistence
+
+- Summaries are persisted in SQLite table `summaries` with columns: `cluster_id` (PK), `tl_dr`, `bullets_json`, `citations_json`, `score`, `created_at`, `published_at`, `version_hash`.
+- Summarization computes a deterministic `version_hash = sha256(PROMPT_VERSION + GUARDRAILS_VERSION + sorted(article_ids) + joined_extracted_facts)` and upserts one row per cluster. Re-running with unchanged inputs is idempotent (no updates).
+- Publish reads persisted summaries from the DB (no recomputation) and writes `summaries.md` and `clusters.json` with unchanged shapes; ranking/ordering uses `rank.score_clusters()`.
+
 Environment (.env)
 
 - `OPENAI_API_KEY=...` (required for real embeddings)

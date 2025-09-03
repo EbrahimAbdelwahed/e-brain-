@@ -3,10 +3,26 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
-from .io import db, fetch_articles_by_ids, fetch_cluster_members, fetch_clusters
+from .io import db, fetch_articles_by_ids, fetch_cluster_members, fetch_clusters, upsert_summary
+
+
+# Versioned caching knobs
+PROMPT_VERSION = "v1"
+GUARDRAILS_VERSION = "v1"
+
+
+def _hash_version(article_ids: list[str], extracted_facts: list[str]) -> str:
+    base = "|".join(
+        [PROMPT_VERSION, GUARDRAILS_VERSION]
+        + sorted(article_ids)
+        + ["||".join(extracted_facts)]
+    )
+    h = hashlib.sha256(base.encode("utf-8")).hexdigest()
+    return h
 
 
 def _first_sentence(text: str) -> str:
@@ -100,6 +116,24 @@ def summarize(logger: logging.Logger | None = None) -> list[dict[str, Any]]:
         red_bullets = _reduce_cluster(arts)
         bullets = red_bullets
         citations = _citations(arts)
+        # Derive a short lead from bullets (X-shaped lead)
+        first = bullets[0] if bullets else ""
+        lead = first.replace("What changed: ", "").strip()
+        if lead and not lead.endswith("."):
+            lead += "."
+        tl_dr = f"X: {lead}" if lead else "X: (no change)"
+        # Hash version for idempotent caching
+        version_hash = _hash_version(sorted(members), map_bullets + bullets)
+        # Persist summary per cluster (idempotent)
+        with db() as conn:
+            upsert_summary(
+                conn,
+                cluster_id=c["cluster_id"],
+                tl_dr=tl_dr,
+                bullets=bullets,
+                citations=citations,
+                version_hash=version_hash,
+            )
         results.append(
             {
                 "cluster_id": c["cluster_id"],
@@ -113,4 +147,3 @@ def summarize(logger: logging.Logger | None = None) -> list[dict[str, Any]]:
     if logger:
         logger.info("Summarized %d clusters", len(results))
     return results
-

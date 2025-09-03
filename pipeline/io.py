@@ -112,6 +112,17 @@ def init_db() -> None:
                 article_id TEXT,
                 PRIMARY KEY (cluster_id, article_id)
             );
+
+            CREATE TABLE IF NOT EXISTS summaries (
+                cluster_id TEXT PRIMARY KEY,
+                tl_dr TEXT,
+                bullets_json TEXT,
+                citations_json TEXT,
+                score REAL,
+                created_at TEXT,
+                published_at TEXT,
+                version_hash TEXT
+            );
             """
         )
 
@@ -395,3 +406,77 @@ def fetch_clusters(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 def fetch_cluster_members(conn: sqlite3.Connection, cluster_id: str) -> list[str]:
     cur = conn.execute("SELECT article_id FROM cluster_members WHERE cluster_id=?", (cluster_id,))
     return [r["article_id"] for r in cur.fetchall()]
+
+
+# Summaries persistence
+def get_summary(conn: sqlite3.Connection, cluster_id: str) -> dict[str, Any] | None:
+    cur = conn.execute("SELECT * FROM summaries WHERE cluster_id=?", (cluster_id,))
+    return cur.fetchone()
+
+
+def upsert_summary(
+    conn: sqlite3.Connection,
+    *,
+    cluster_id: str,
+    tl_dr: str,
+    bullets: list[str],
+    citations: list[dict[str, Any]],
+    version_hash: str,
+    score: float | None = None,
+) -> None:
+    existing = get_summary(conn, cluster_id)
+    now = datetime.utcnow().isoformat() + "Z"
+    if existing and existing.get("version_hash") == version_hash:
+        # Idempotent: no-op if content unchanged
+        return
+    with _lock:
+        if existing is None:
+            conn.execute(
+                """
+                INSERT INTO summaries(cluster_id, tl_dr, bullets_json, citations_json, score, created_at, published_at, version_hash)
+                VALUES(?,?,?,?,?,?,?,?)
+                """,
+                (
+                    cluster_id,
+                    tl_dr,
+                    json.dumps(bullets, ensure_ascii=False),
+                    json.dumps(citations, ensure_ascii=False),
+                    score if score is not None else 0.0,
+                    now,
+                    None,
+                    version_hash,
+                ),
+            )
+        else:
+            # Preserve created_at; update content and version
+            conn.execute(
+                """
+                UPDATE summaries
+                SET tl_dr=?, bullets_json=?, citations_json=?, version_hash=?, score=COALESCE(?, score)
+                WHERE cluster_id=?
+                """,
+                (
+                    tl_dr,
+                    json.dumps(bullets, ensure_ascii=False),
+                    json.dumps(citations, ensure_ascii=False),
+                    version_hash,
+                    score,
+                    cluster_id,
+                ),
+            )
+
+
+def fetch_summaries(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    cur = conn.execute("SELECT * FROM summaries")
+    return list(cur.fetchall())
+
+
+def mark_published(conn: sqlite3.Connection, cluster_ids: list[str]) -> None:
+    if not cluster_ids:
+        return
+    ts = datetime.utcnow().isoformat() + "Z"
+    with _lock:
+        conn.executemany(
+            "UPDATE summaries SET published_at=? WHERE cluster_id=?",
+            [(ts, cid) for cid in cluster_ids],
+        )
