@@ -16,6 +16,7 @@ from .io import init_db
 from .logging import setup_logging
 from .rank import score_clusters
 from .summarize import summarize
+from .main import publish as publish_from_db
 
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -135,39 +136,12 @@ def publish(
     init_db()
     ctx = RunContext(out_dir=settings.out_dir, logger=logger)
     t0 = time.time()
-    summaries = summarize(logger=ctx.logger)
-    scores = score_clusters()
-    score_map = {s["cluster_id"]: s for s in scores}
-    summaries_sorted = sorted(
-        summaries, key=lambda x: score_map.get(x["cluster_id"], {}).get("score", 0.0), reverse=True
-    )
-    # clusters.json
-    clusters_json = ctx.out_dir / "clusters.json"
-    data = []
-    for s in summaries_sorted:
-        sc = score_map.get(s["cluster_id"], {"score": 0.0, "size": 0})
-        row = dict(s)
-        row.update(sc)
-        data.append(row)
-    if not settings.dry_run:
-        clusters_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    # summaries.md
-    md_lines = ["# E-Brain Bot Summaries\n"]
-    for s in summaries_sorted:
-        sc = score_map.get(s["cluster_id"], {"score": 0.0, "size": 0})
-        md_lines.append(f"\n## Cluster {s['cluster_id']} — score {sc['score']:.3f}, size {sc['size']}")
-        for b in s["bullets"]:
-            md_lines.append(f"- {b}")
-        md_lines.append("\nCitations:")
-        for c in s["citations"]:
-            md_lines.append(f"- [{c['title']}]({c['url']}) — {c['outlet']} — {c['date']}")
-    if not settings.dry_run:
-        (ctx.out_dir / "summaries.md").write_text("\n".join(md_lines), encoding="utf-8")
-    # minimal report
-    report = {"counts": {"clusters": len(summaries_sorted)}, "durations": {"publish_sec": time.time() - t0}}
+    rows = publish_from_db(ctx.out_dir, dry_run=settings.dry_run, logger=ctx.logger)
+    # minimal report (clusters count + duration)
+    report = {"counts": {"clusters": len(rows)}, "durations": {"publish_sec": time.time() - t0}}
     if not settings.dry_run:
         (ctx.out_dir / "run_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    logger.info("Publish: %d clusters -> %s", len(summaries_sorted), ctx.out_dir)
+    logger.info("Publish: %d clusters -> %s", len(rows), ctx.out_dir)
 
 
 @app.command("all")
@@ -218,28 +192,16 @@ def run_all(
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     logger.info("Cluster: %d clusters", len(clusters))
 
-    # Publish
+    # Summarize (persist to DB)
     t = time.time()
-    summaries = summarize(logger=ctx.logger)
-    scores = score_clusters()
-    score_map = {s["cluster_id"]: s for s in scores}
-    summaries_sorted = sorted(
-        summaries, key=lambda x: score_map.get(x["cluster_id"], {}).get("score", 0.0), reverse=True
-    )
-    (ctx.out_dir / "clusters.json").write_text(
-        json.dumps([dict(s, **score_map.get(s["cluster_id"], {"score": 0.0, "size": 0})) for s in summaries_sorted], indent=2),
-        encoding="utf-8",
-    )
-    md_lines = ["# E-Brain Bot Summaries\n"]
-    for s in summaries_sorted:
-        sc = score_map.get(s["cluster_id"], {"score": 0.0, "size": 0})
-        md_lines.append(f"\n## Cluster {s['cluster_id']} — score {sc['score']:.3f}, size {sc['size']}")
-        for b in s["bullets"]:
-            md_lines.append(f"- {b}")
-        md_lines.append("\nCitations:")
-        for c in s["citations"]:
-            md_lines.append(f"- [{c['title']}]({c['url']}) — {c['outlet']} — {c['date']}")
-    (ctx.out_dir / "summaries.md").write_text("\n".join(md_lines), encoding="utf-8")
+    _ = summarize(logger=ctx.logger)
+    report["durations"]["summarize_sec"] = time.time() - t
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    logger.info("Summarize: done")
+
+    # Publish from DB (no re-summarize)
+    t = time.time()
+    _ = publish_from_db(ctx.out_dir, logger=ctx.logger)
     report["durations"]["publish_sec"] = time.time() - t
     total = time.time() - t0
     report["durations"]["total_sec"] = total

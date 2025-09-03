@@ -62,6 +62,7 @@ def publish(out_dir: Path, *, dry_run: bool = False, logger: logging.Logger | No
         if logger:
             logger.info("No summaries in DB to publish.")
         return []
+
     # clusters.json
     clusters_json = Path(out_dir) / "clusters.json"
     data = rows
@@ -78,7 +79,9 @@ def publish(out_dir: Path, *, dry_run: bool = False, logger: logging.Logger | No
             md_lines.append(f"- {b}")
         md_lines.append("\nCitations:")
         for c in r["citations"]:
-            md_lines.append(f"- [{c.get('title')}]({c.get('url')}) — {c.get('outlet')} — {c.get('date')}")
+            md_lines.append(
+                f"- [{c.get('title')}]({c.get('url')}) — {c.get('outlet')} — {c.get('date')}"
+            )
     if not dry_run:
         (Path(out_dir) / "summaries.md").write_text("\n".join(md_lines), encoding="utf-8")
 
