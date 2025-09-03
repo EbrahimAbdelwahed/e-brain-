@@ -1,0 +1,12 @@
+{
+  "counts": {
+    "clusters": 0
+  },
+  "durations": {
+    "total_sec": 0.04699349403381348
+  },
+  "failures": [],
+  "rate_limit": {
+    "per_host_rps": 2.0
+  }
+}
