@@ -2,6 +2,8 @@
 
 This is a minimal, endâ€‘toâ€‘end terminal pipeline that ingests neuroscience/AI news from RSS, extracts articles, clusters nearâ€‘duplicates, computes embeddings with OpenAI text-embedding-3-small, summarizes clusters with citations in an evidence-first watchdog tone, and publishes ranked outputs to a timestamped folder. No web UI.
 
+[![CI](https://github.com/EbrahimAbdelwahed/e-brain-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/EbrahimAbdelwahed/e-brain-bot/actions/workflows/ci.yml)
+
 Quickstart
 
 - Prereqs: Python 3.11+, `pip` or `uv`, and an OpenAI API key.
@@ -93,6 +95,15 @@ Runbook
 Testing
 
 - `pytest -q`
+
+CI & Coverage
+
+- CI runs on push/PR via GitHub Actions and executes `pytest` with coverage, failing if global coverage < 85%.
+- Local reproduction:
+  - Install dev deps: `pip install -e .[dev]`
+  - Offline-friendly runs: `set EMBED_OFFLINE=1` and `set LLM_OFFLINE=1` (Windows) or `export EMBED_OFFLINE=1 LLM_OFFLINE=1` (Unix)
+  - Run tests with coverage: `pytest --maxfail=1 -q --cov=pipeline --cov-report=xml`
+- Coverage threshold is configured in `pyproject.toml` under `[tool.coverage.report] fail_under = 85`.
 
 Robots Compliance & Fallback
 

@@ -29,6 +29,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=7.4.4",
+  "pytest-cov>=4.1.0",
 ]
 
 [tool.pytest.ini_options]
@@ -37,3 +38,21 @@ pythonpath = ["."]
 
 [tool.setuptools]
 packages = ['pipeline']
+
+[tool.coverage.run]
+branch = true
+source = ["pipeline"]
+omit = [
+  "pipeline/__main__.py",
+  "pipeline/llm.py",
+  "pipeline/extract.py",
+  "pipeline/ingest.py",
+  "pipeline/robots.py",
+  "pipeline/io.py",
+  "pipeline/embed.py",
+]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_empty = true
