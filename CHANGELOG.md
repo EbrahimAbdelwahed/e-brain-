@@ -1,6 +1,6 @@
 Changelog
 
-2025-09-04 — MVP Finalization
+2025-09-04 – MVP Finalization
 - Ingest/extract/cluster via MinHash-LSH with embeddings cache.
 - OpenRouter-backed LLM summarization with response caching.
 - Summaries persisted in DB; publish reads from DB.
@@ -10,3 +10,4 @@ Changelog
 - CI: pytest and coverage reporting wired.
 - Observability: Langfuse hooks (opt-in via env).
 
+2025-09-04: README and .env realigned to implemented pipeline; removed unrelated references. No functional changes.
