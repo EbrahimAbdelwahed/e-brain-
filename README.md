@@ -25,13 +25,21 @@ Environment
 - `DATABASE_URL` (optional): Postgres connection for summaries persistence
 
 Runbook (CLI)
-- Fetch sources: `python -m pipeline fetch`
-- Extract content: `python -m pipeline extract`
-- Cluster near-duplicates: `python -m pipeline cluster --jaccard-threshold 0.85 --num-perm 64`
-- Summarize: `python -m pipeline summarize --use-llm --model <provider/model>`
-- Publish summaries: `python -m pipeline publish`
-- Full pipeline: `python -m pipeline all`
-- Evaluate models: `python -m pipeline eval-models --models <modelA,modelB,...> --seed 42`
+- Preferred: use the `e_brain` module
+  - Init DB: `python -m e_brain init-db`
+  - Ingest RSS: `python -m e_brain ingest-rss [--feeds-file feeds.txt] [--max 20] [--filter \\b(neuro|ai)\\b]`
+  - Embed new items: `python -m e_brain embed [--batch 64]`
+  - Generate candidate post: `python -m e_brain generate [--theme "neuroscience general facts"] [--max-sources 5]`
+  - Publish (respects DRY_RUN and windows): `python -m e_brain publish [--limit 3] [--tz US/Eastern]`
+
+- Compatibility alias: `python -m pipeline` (maps to the above)
+  - Fetch sources: `python -m pipeline fetch`
+  - Extract content: `python -m pipeline extract` (no-op; handled during fetch)
+  - Cluster: `python -m pipeline cluster` (no-op; not implemented in this MVP)
+  - Summarize: `python -m pipeline summarize [--theme ...] [--max-sources 5]`
+  - Publish summaries: `python -m pipeline publish [--limit 3] [--tz US/Eastern]`
+  - Full pipeline: `python -m pipeline all`
+  - Evaluate models: `python -m pipeline eval-models` (no-op)
 
 LLM Summarization (OpenRouter)
 - Uses OpenRouter for LLM access. Control behavior via `SUMMARIZE_USE_LLM`, `SUMMARIZE_MODEL`, `SUMMARIZE_TEMPERATURE`, `SUMMARIZE_TOP_P`, and `SUMMARIZE_SEED`. Set `OPENROUTER_API_KEY` and optionally `OPENROUTER_BASE_URL`.
