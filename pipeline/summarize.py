@@ -4,22 +4,20 @@ import json
 import logging
 from collections import Counter
 import hashlib
+import os
 from datetime import datetime, timezone
 from typing import Any
 
-from .io import db, fetch_articles_by_ids, fetch_cluster_members, fetch_clusters, upsert_summary
+from .io import db, fetch_articles_by_ids, fetch_cluster_members, fetch_clusters, upsert_summary, get_summary
+from .prompts import PROMPT_VERSION, GUARDRAILS_VERSION, system_prompt, build_map_facts, build_reduce_prompt
+from . import llm
 
 
-# Versioned caching knobs
-PROMPT_VERSION = "v1"
-GUARDRAILS_VERSION = "v1"
-
-
-def _hash_version(article_ids: list[str], extracted_facts: list[str]) -> str:
+def _hash_version(article_ids: list[str], extracted_facts: list[str], model: str | None) -> str:
     base = "|".join(
-        [PROMPT_VERSION, GUARDRAILS_VERSION]
+        [PROMPT_VERSION, GUARDRAILS_VERSION, (model or "heuristic")]
         + sorted(article_ids)
-        + ["||".join(extracted_facts)]
+        + ["||".join(sorted(extracted_facts))]
     )
     h = hashlib.sha256(base.encode("utf-8")).hexdigest()
     return h
@@ -100,7 +98,26 @@ def _citations(cluster_articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def summarize(logger: logging.Logger | None = None) -> list[dict[str, Any]]:
+def summarize(
+    logger: logging.Logger | None = None,
+    *,
+    use_llm: bool | None = None,
+    model: str | None = None,
+) -> list[dict[str, Any]]:
+    """Summarize clusters and persist to DB.
+
+    If SUMMARIZE_USE_LLM=1 or use_llm is True and OPENROUTER_API_KEY is set, use LLM via OpenRouter.
+    Otherwise, fall back to heuristic summarization (unchanged shapes).
+    """
+    # Resolve flags from env if not explicitly passed
+    env_use_llm = os.getenv("SUMMARIZE_USE_LLM", "0") == "1"
+    use_llm = bool(use_llm) or env_use_llm
+    model = model or os.getenv("SUMMARIZE_MODEL", "moonshotai/kimi-k2")
+    temperature = float(os.getenv("SUMMARIZE_TEMPERATURE", "0.2"))
+    top_p = float(os.getenv("SUMMARIZE_TOP_P", "0.9"))
+    seed_env = os.getenv("SUMMARIZE_SEED")
+    seed = int(seed_env) if seed_env is not None and seed_env != "" else None
+
     with db() as conn:
         clusters = fetch_clusters(conn)
     if not clusters:
@@ -112,28 +129,108 @@ def summarize(logger: logging.Logger | None = None) -> list[dict[str, Any]]:
         with db() as conn:
             members = fetch_cluster_members(conn, c["cluster_id"])  # list of article_ids
             arts = fetch_articles_by_ids(conn, members)
+        # Map facts (heuristic) are used both for LLM and heuristic reduce
         map_bullets = [b for a in arts for b in _map_article(a)]
-        red_bullets = _reduce_cluster(arts)
-        bullets = red_bullets
-        citations = _citations(arts)
-        # Derive a short lead from bullets (X-shaped lead)
-        first = bullets[0] if bullets else ""
-        lead = first.replace("What changed: ", "").strip()
-        if lead and not lead.endswith("."):
-            lead += "."
-        tl_dr = f"X: {lead}" if lead else "X: (no change)"
-        # Hash version for idempotent caching
-        version_hash = _hash_version(sorted(members), map_bullets + bullets)
-        # Persist summary per cluster (idempotent)
-        with db() as conn:
-            upsert_summary(
-                conn,
-                cluster_id=c["cluster_id"],
-                tl_dr=tl_dr,
-                bullets=bullets,
-                citations=citations,
-                version_hash=version_hash,
-            )
+
+        if use_llm and os.getenv("OPENROUTER_API_KEY"):
+            # Version hash includes model and extracted facts
+            version_hash = _hash_version(sorted(members), map_bullets, model)
+            # Skip provider call if summary is already up to date (cache boundary)
+            with db() as conn:
+                existing = get_summary(conn, c["cluster_id"])
+            if existing and existing.get("version_hash") == version_hash:
+                if logger:
+                    logger.debug("Cache hit for cluster %s; skipping LLM", c["cluster_id"])
+                # Still return a shape for results (inflate from DB on publish usually)
+                citations = _citations(arts)
+                bullets = json.loads(existing.get("bullets_json") or "[]")
+                tl_dr = existing.get("tl_dr") or "X: (no change)"
+            else:
+                # Build prompts and call provider
+                sys = system_prompt()
+                facts_texts = [build_map_facts(a) for a in arts]
+                user = build_reduce_prompt(cluster_articles=arts, extracted_facts=facts_texts)
+                try:
+                    content = llm.generate_chat(
+                        model=model or "moonshotai/kimi-k2",
+                        system=sys,
+                        messages=[{"role": "user", "content": user}],
+                        temperature=temperature,
+                        top_p=top_p,
+                        seed=seed,
+                    )
+                except llm.LLMError as e:
+                    if logger:
+                        logger.warning("LLM failed (%s); falling back to heuristic", e)
+                    # Fall back to heuristic reduce
+                    bullets = _reduce_cluster(arts)
+                    citations = _citations(arts)
+                    first = bullets[0] if bullets else ""
+                    lead = first.replace("What changed: ", "").strip()
+                    if lead and not lead.endswith("."):
+                        lead += "."
+                    tl_dr = f"X: {lead}" if lead else "X: (no change)"
+                else:
+                    # Parse content into lead + bullets
+                    lead = ""
+                    bullets_list: list[str] = []
+                    for raw_line in content.splitlines():
+                        line = raw_line.strip()
+                        if not line:
+                            continue
+                        if line.lower().startswith("lead:") and not lead:
+                            lead = line.split(":", 1)[1].strip()
+                            continue
+                        if line.startswith("- "):
+                            bullets_list.append(line[2:].strip())
+                    # Ensure Bottom line present
+                    if not any(b.lower().startswith("bottom line:") for b in bullets_list):
+                        if lead:
+                            bullets_list.append(f"Bottom line: {lead}")
+                        else:
+                            bullets_list.append("Bottom line: evidence-first reading over hype; see citations.")
+                    bullets = bullets_list[:5] if bullets_list else _reduce_cluster(arts)
+                    citations = _citations(arts)
+                    # Derive tl;dr from lead
+                    ld = lead.strip()
+                    if ld and not ld.endswith("."):
+                        ld += "."
+                    tl_dr = f"X: {ld}" if ld else "X: (no change)"
+
+                # Persist summary per cluster (idempotent)
+                with db() as conn:
+                    upsert_summary(
+                        conn,
+                        cluster_id=c["cluster_id"],
+                        tl_dr=tl_dr,
+                        bullets=bullets,
+                        citations=citations,
+                        version_hash=version_hash,
+                    )
+                # Small in-process boundary is implicit via DB check within the same run
+        else:
+            # Heuristic path (unchanged behavior)
+            red_bullets = _reduce_cluster(arts)
+            bullets = red_bullets
+            citations = _citations(arts)
+            # Derive a short lead from bullets (X-shaped lead)
+            first = bullets[0] if bullets else ""
+            lead = first.replace("What changed: ", "").strip()
+            if lead and not lead.endswith("."):
+                lead += "."
+            tl_dr = f"X: {lead}" if lead else "X: (no change)"
+            # Hash version for idempotent caching
+            version_hash = _hash_version(sorted(members), map_bullets + bullets, None)
+            # Persist summary per cluster (idempotent)
+            with db() as conn:
+                upsert_summary(
+                    conn,
+                    cluster_id=c["cluster_id"],
+                    tl_dr=tl_dr,
+                    bullets=bullets,
+                    citations=citations,
+                    version_hash=version_hash,
+                )
         results.append(
             {
                 "cluster_id": c["cluster_id"],

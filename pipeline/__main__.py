@@ -110,14 +110,44 @@ def summarize_cmd(
     dry_run: bool = typer.Option(False),
     log_level: str = typer.Option("INFO"),
     parallel: int = typer.Option(6),
+    use_llm: bool = typer.Option(
+        False,
+        "--use-llm/--no-use-llm",
+        help="Use OpenRouter-backed LLM summarization (or set SUMMARIZE_USE_LLM=1)",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        help="LLM model name (default from SUMMARIZE_MODEL or 'moonshotai/kimi-k2')",
+    ),
 ):
     """Summarize clusters with citations and watchdog tone."""
+    import os
+
     settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
     logger = setup_logging(settings.out_dir, settings.log_level)
     init_db()
+    # Resolve flags/env
+    final_use_llm = use_llm or (os.getenv("SUMMARIZE_USE_LLM", "0") == "1")
+    chosen_model = model or os.getenv("SUMMARIZE_MODEL", "moonshotai/kimi-k2")
     t0 = time.time()
-    _ = summarize(logger=logger)
+    _ = summarize(logger=logger, use_llm=final_use_llm, model=chosen_model)
     dt = time.time() - t0
+    # Record model choice in run report
+    try:
+        report_path = settings.out_dir / "run_report.json"
+        if report_path.exists():
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        else:
+            report = {}
+        report.setdefault("params", {})
+        report["params"].update({
+            "summarize_model": chosen_model,
+            "use_llm": final_use_llm,
+        })
+        if not settings.dry_run:
+            report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except Exception:
+        pass
     logger.info("Summarize done in %.2fs", dt)
 
 
@@ -152,6 +182,15 @@ def run_all(
     dry_run: bool = typer.Option(False),
     log_level: str = typer.Option("INFO"),
     parallel: int = typer.Option(6),
+    use_llm: bool = typer.Option(
+        False,
+        "--use-llm/--no-use-llm",
+        help="Use OpenRouter-backed LLM summarization (or set SUMMARIZE_USE_LLM=1)",
+    ),
+    model: Optional[str] = typer.Option(
+        None,
+        help="LLM model name (default from SUMMARIZE_MODEL or 'moonshotai/kimi-k2')",
+    ),
 ):
     """Run fetch – extract – cluster – summarize – publish."""
     # One run dir + one logger for the whole run
@@ -194,8 +233,18 @@ def run_all(
 
     # Summarize (persist to DB)
     t = time.time()
-    _ = summarize(logger=ctx.logger)
+    import os
+
+    final_use_llm = use_llm or (os.getenv("SUMMARIZE_USE_LLM", "0") == "1")
+    chosen_model = model or os.getenv("SUMMARIZE_MODEL", "moonshotai/kimi-k2")
+    _ = summarize(logger=ctx.logger, use_llm=final_use_llm, model=chosen_model)
     report["durations"]["summarize_sec"] = time.time() - t
+    # Record model choice
+    report.setdefault("params", {})
+    report["params"].update({
+        "summarize_model": chosen_model,
+        "use_llm": final_use_llm,
+    })
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     logger.info("Summarize: done")
 

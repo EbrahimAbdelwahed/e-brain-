@@ -23,6 +23,7 @@ CLI
 - Commands: `fetch`, `extract`, `cluster`, `summarize`, `publish`, `all`
 - Flags: `--out`, `--since`, `--max-items`, `--dry-run`, `--log-level`, `--parallel`
 - Cluster flags: `--jaccard-threshold` (default 0.85), `--num-perm` (default 128)
+- Summarize flags: `--use-llm/--no-use-llm`, `--model TEXT` (default from `SUMMARIZE_MODEL` or `moonshotai/kimi-k2`)
 - Example: `python -m pipeline all --out ./pipeline_runs --since 2025-09-01T00:00:00Z --parallel 8`
 
 Outputs (under the run folder)
@@ -42,6 +43,17 @@ Environment (.env)
 
 - `OPENAI_API_KEY=...` (required for real embeddings)
 - Optional: `EMBED_OFFLINE=1` to force offline embedding stub
+
+LLM Summarization (OpenRouter)
+
+- Default summarization is heuristic and offline-friendly. To enable LLM summarization via OpenRouter:
+  - Set `OPENROUTER_API_KEY=...` (and optionally `OPENROUTER_BASE_URL=https://openrouter.ai/api/v1`).
+  - Either pass `--use-llm` on the CLI or set `SUMMARIZE_USE_LLM=1`.
+  - Choose a model with `--model` or `SUMMARIZE_MODEL` (default: `moonshotai/kimi-k2`).
+  - Determinism defaults: `SUMMARIZE_TEMPERATURE=0.2`, `SUMMARIZE_TOP_P=0.9`; set `SUMMARIZE_SEED` (integer) to fix randomness if supported.
+- Caching & idempotency: summaries are cached by a `version_hash` including `{prompt_version, guardrails_version, model, sorted(article_ids), extracted_facts}`. Re-running with the same inputs does not re-call the LLM.
+- Offline/CI: tests monkeypatch the provider; no network calls are made. You can also set `LLM_OFFLINE=1` locally to stub provider responses.
+- Evaluation: record the chosen model in `run_report.json` by running `python -m pipeline summarize --use-llm --model <name>` (or via `all`). Re-run with different `--model` values to compare outputs.
 
 Runbook
 
