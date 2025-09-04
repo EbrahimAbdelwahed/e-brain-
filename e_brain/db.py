@@ -9,6 +9,7 @@ import os
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Json
 
 from .config import get_settings
 from .util.logging import get_logger
@@ -139,7 +140,7 @@ def upsert_source_rss(url: str, title: Optional[str] = None) -> int:
             # Merge meta with new title
             cur.execute(
                 "UPDATE sources SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb WHERE id=%s",
-                ({"title": title}, src_id),
+                (Json({"title": title}), src_id),
             )
         return src_id
 
@@ -148,7 +149,7 @@ def update_source_meta(source_id: int, meta_patch: dict) -> None:
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE sources SET meta = COALESCE(meta, '{}'::jsonb) || %s::jsonb WHERE id=%s",
-            (meta_patch, source_id),
+            (Json(meta_patch), source_id),
         )
 
 
@@ -177,7 +178,7 @@ def insert_raw_items(items: Iterable[dict]) -> int:
                             it.get("source_id"),
                             it.get("author"),
                             it.get("text"),
-                            it.get("meta", {}),
+                            Json(it.get("meta", {})),
                             it.get("created_at"),
                         ),
                     )
