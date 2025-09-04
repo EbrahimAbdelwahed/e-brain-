@@ -103,6 +103,7 @@ def summarize(
     *,
     use_llm: bool | None = None,
     model: str | None = None,
+    persist: bool = True,
 ) -> list[dict[str, Any]]:
     """Summarize clusters and persist to DB.
 
@@ -197,16 +198,17 @@ def summarize(
                         ld += "."
                     tl_dr = f"X: {ld}" if ld else "X: (no change)"
 
-                # Persist summary per cluster (idempotent)
-                with db() as conn:
-                    upsert_summary(
-                        conn,
-                        cluster_id=c["cluster_id"],
-                        tl_dr=tl_dr,
-                        bullets=bullets,
-                        citations=citations,
-                        version_hash=version_hash,
-                    )
+                # Persist summary per cluster (idempotent) unless persist=False (eval path)
+                if persist:
+                    with db() as conn:
+                        upsert_summary(
+                            conn,
+                            cluster_id=c["cluster_id"],
+                            tl_dr=tl_dr,
+                            bullets=bullets,
+                            citations=citations,
+                            version_hash=version_hash,
+                        )
                 # Small in-process boundary is implicit via DB check within the same run
         else:
             # Heuristic path (unchanged behavior)
@@ -221,16 +223,17 @@ def summarize(
             tl_dr = f"X: {lead}" if lead else "X: (no change)"
             # Hash version for idempotent caching
             version_hash = _hash_version(sorted(members), map_bullets + bullets, None)
-            # Persist summary per cluster (idempotent)
-            with db() as conn:
-                upsert_summary(
-                    conn,
-                    cluster_id=c["cluster_id"],
-                    tl_dr=tl_dr,
-                    bullets=bullets,
-                    citations=citations,
-                    version_hash=version_hash,
-                )
+            # Persist summary per cluster (idempotent) unless persist=False (eval path)
+            if persist:
+                with db() as conn:
+                    upsert_summary(
+                        conn,
+                        cluster_id=c["cluster_id"],
+                        tl_dr=tl_dr,
+                        bullets=bullets,
+                        citations=citations,
+                        version_hash=version_hash,
+                    )
         results.append(
             {
                 "cluster_id": c["cluster_id"],

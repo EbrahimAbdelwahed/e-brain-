@@ -55,6 +55,18 @@ LLM Summarization (OpenRouter)
 - Offline/CI: tests monkeypatch the provider; no network calls are made. You can also set `LLM_OFFLINE=1` locally to stub provider responses.
 - Evaluation: record the chosen model in `run_report.json` by running `python -m pipeline summarize --use-llm --model <name>` (or via `all`). Re-run with different `--model` values to compare outputs.
 
+Model Evaluation
+
+- Purpose: Compare multiple OpenRouter models' summaries side-by-side without changing persisted DB summaries.
+- Setup: set `OPENROUTER_API_KEY` (and optionally `OPENROUTER_BASE_URL`). Determinism defaults `SUMMARIZE_TEMPERATURE=0.2`, `SUMMARIZE_TOP_P=0.9`; pass `--seed INT` or set `SUMMARIZE_SEED` to fix randomness.
+- Run: `python -m pipeline eval-models --models "modelA,modelB" --seed 123`
+- Artifacts (under the run folder):
+  - `eval/<model>.md` — per-model outputs grouped by cluster.
+  - `eval/compare.md` — per-cluster sections with all models' bullets.
+  - `eval_report.json` — `{models, counts, durations, params}`.
+- Non-persisting: this command never publishes or modifies `summaries`; DB rows remain unchanged.
+- Offline testing: either set `LLM_OFFLINE=1` for a local stub, or monkeypatch `pipeline.llm.generate_chat` in tests (see `tests/test_eval_models.py`).
+
 Runbook
 
 1) `python -m pipeline fetch --since <ISO8601>`: fetch RSS into SQLite with ETag caching.

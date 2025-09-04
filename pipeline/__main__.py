@@ -17,6 +17,7 @@ from .logging import setup_logging
 from .rank import score_clusters
 from .summarize import summarize
 from .main import publish as publish_from_db
+from .eval import evaluate_models
 
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -150,6 +151,49 @@ def summarize_cmd(
         pass
     logger.info("Summarize done in %.2fs", dt)
 
+
+@app.command("eval-models")
+def eval_models(
+    out: Optional[Path] = typer.Option(None),
+    since: Optional[str] = typer.Option(None),
+    max_items: Optional[int] = typer.Option(None),
+    dry_run: bool = typer.Option(False),
+    log_level: str = typer.Option("INFO"),
+    parallel: int = typer.Option(6),
+    models: str = typer.Option(..., help="Comma-separated OpenRouter model names"),
+    seed: Optional[int] = typer.Option(None, help="Deterministic seed (optional)"),
+):
+    """Evaluate multiple OpenRouter models' summaries without DB mutation.
+
+    Writes per-model files under run_dir/eval and a compare.md, plus eval_report.json.
+    """
+    import os
+
+    settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
+    logger = setup_logging(settings.out_dir, settings.log_level)
+    init_db()
+
+    # Parse model names
+    model_list = [m.strip() for m in (models or "").split(",") if m.strip()]
+    if not model_list:
+        raise typer.BadParameter("--models must include at least one model name")
+
+    # Respect env defaults for temperature/top_p; set seed if provided
+    old_seed_env = os.getenv("SUMMARIZE_SEED")
+    if seed is not None:
+        os.environ["SUMMARIZE_SEED"] = str(int(seed))
+
+    try:
+        t0 = time.time()
+        _ = evaluate_models(out_dir=settings.out_dir, models=model_list, seed=seed, logger=logger)
+        dt = time.time() - t0
+        logger.info("Model evaluation done in %.2fs", dt)
+    finally:
+        if seed is not None:
+            if old_seed_env is None:
+                os.environ.pop("SUMMARIZE_SEED", None)
+            else:
+                os.environ["SUMMARIZE_SEED"] = old_seed_env
 
 @app.command()
 def publish(
