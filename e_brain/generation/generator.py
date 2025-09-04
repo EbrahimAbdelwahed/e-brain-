@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import List, Optional
 
 from openai import OpenAI
@@ -35,24 +36,36 @@ def generate_post_from_query(query: str, max_sources: int = 5) -> Optional[str]:
     bullets = [f"- {m['text']}" for m in matches]
     context = "\n".join(bullets)
 
-    s = get_settings()
-    client = _client()
-    prompt = (
-        "Context (curated snippets):\n" + context + "\n\n"
-        f"Write an audience-ready X post about: '{query}'."
-        " Prefer factual clarity, avoid hype, keep it short."
-        " If concept is complex, offer a concrete example."
-    )
-    resp = client.chat.completions.create(
-        model=s.chat_model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.7,
-        max_tokens=120,
-    )
-    text = resp.choices[0].message.content.strip()
+    # Optional DSPy path (toggle via USE_DSPY=true)
+    use_dspy = os.getenv("USE_DSPY", "false").lower() == "true"
+    if use_dspy:
+        try:
+            from ..llm.dspy_module import generate_post as dspy_generate
+
+            text = dspy_generate(query=query, context=context)
+        except Exception as e:
+            logger.info("dspy_generate_error_fallback", extra={"error": str(e)})
+            use_dspy = False
+
+    if not use_dspy:
+        s = get_settings()
+        client = _client()
+        prompt = (
+            "Context (curated snippets):\n" + context + "\n\n"
+            f"Write an audience-ready X post about: '{query}'."
+            " Prefer factual clarity, avoid hype, keep it short."
+            " If concept is complex, offer a concrete example."
+        )
+        resp = client.chat.completions.create(
+            model=s.chat_model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+            max_tokens=120,
+        )
+        text = resp.choices[0].message.content.strip()
     ok, reason = moderate_text(text)
     if not ok:
         logger.info("moderation_rejected", extra={"reason": reason})
