@@ -11,6 +11,7 @@ from typing import Any
 from .io import db, fetch_articles_by_ids, fetch_cluster_members, fetch_clusters, upsert_summary, get_summary
 from .prompts import PROMPT_VERSION, GUARDRAILS_VERSION, system_prompt, build_map_facts, build_reduce_prompt
 from . import llm
+from .obs import obs_span
 
 
 def _hash_version(article_ids: list[str], extracted_facts: list[str], model: str | None) -> str:
@@ -152,14 +153,25 @@ def summarize(
                 facts_texts = [build_map_facts(a) for a in arts]
                 user = build_reduce_prompt(cluster_articles=arts, extracted_facts=facts_texts)
                 try:
-                    content = llm.generate_chat(
-                        model=model or "moonshotai/kimi-k2",
-                        system=sys,
-                        messages=[{"role": "user", "content": user}],
-                        temperature=temperature,
-                        top_p=top_p,
-                        seed=seed,
-                    )
+                    with obs_span(
+                        "llm.summarize",
+                        {
+                            "model": (model or "moonshotai/kimi-k2"),
+                            "temperature": float(temperature),
+                            "top_p": float(top_p),
+                            "seed": int(seed) if seed is not None else -1,
+                            "prompt_chars": len(user),
+                        },
+                    ) as _span:
+                        content = llm.generate_chat(
+                            model=model or "moonshotai/kimi-k2",
+                            system=sys,
+                            messages=[{"role": "user", "content": user}],
+                            temperature=temperature,
+                            top_p=top_p,
+                            seed=seed,
+                        )
+                        _span.set({"output_chars": len(content)})
                 except llm.LLMError as e:
                     if logger:
                         logger.warning("LLM failed (%s); falling back to heuristic", e)

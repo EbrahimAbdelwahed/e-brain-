@@ -71,6 +71,15 @@ LLM Summarization (OpenRouter)
 - Offline/CI: tests monkeypatch the provider; no network calls are made. You can also set `LLM_OFFLINE=1` locally to stub provider responses.
 - Evaluation: record the chosen model in `run_report.json` by running `python -m pipeline summarize --use-llm --model <name>` (or via `all`). Re-run with different `--model` values to compare outputs.
 
+Observability
+
+- Env vars: set `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, and `LANGFUSE_SECRET_KEY` to enable optional Langfuse tracing. If any are unset, observability is a safe no-op and never performs network calls.
+- Spans structure (coarse-grained, stage boundaries):
+  - `pipeline.fetch`, `pipeline.extract`, `pipeline.cluster`, `pipeline.summarize`, `pipeline.publish`; and within `summarize`, LLM provider calls are wrapped in `llm.summarize` with attributes `{model, temperature, top_p, seed, prompt_chars, output_chars}`.
+- Local logs: spans also emit start/end lines to `logs/run.log` for offline visibility.
+- Run report enrichment: `run_report.json` gains `observability: {"enabled": <bool>}` and may include an internal `trace_id` if available. Existing fields and consumers remain unchanged.
+- Installation: Langfuse is optional; to install with observability extras use `pip install -e .[observability]`. Tests and CI remain offline-friendly.
+
 Model Evaluation
 
 - Purpose: Compare multiple OpenRouter models' summaries side-by-side without changing persisted DB summaries.

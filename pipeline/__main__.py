@@ -18,6 +18,7 @@ from .rank import score_clusters
 from .summarize import summarize
 from .main import publish as publish_from_db
 from .eval import evaluate_models
+from .obs import obs_span, obs_metadata
 
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -57,10 +58,22 @@ def fetch(
     settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
     logger = setup_logging(settings.out_dir, settings.log_level)
     init_db()
-    t0 = time.time()
-    totals = fetch_feeds(since=settings.since, max_items=settings.max_items, logger=logger)
-    dt = time.time() - t0
-    logger.info("Fetch done in %.2fs: %s", dt, totals)
+    with obs_span(
+        "pipeline.fetch",
+        {
+            "since": (settings.since.isoformat() if settings.since else ""),
+            "max_items": settings.max_items or 0,
+        },
+    ) as span:
+        t0 = time.time()
+        totals = fetch_feeds(since=settings.since, max_items=settings.max_items, logger=logger)
+        dt = time.time() - t0
+        span.set({
+            "feeds": totals.get("feeds", 0),
+            "raw_entries": totals.get("entries", 0),
+            "raw_inserted": totals.get("inserted", 0),
+        })
+        logger.info("Fetch done in %.2fs: %s", dt, totals)
 
 
 @app.command()
@@ -76,10 +89,15 @@ def extract(
     settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
     logger = setup_logging(settings.out_dir, settings.log_level)
     init_db()
-    t0 = time.time()
-    n = extract_step(limit=settings.max_items, parallel=settings.parallel, logger=logger)
-    dt = time.time() - t0
-    logger.info("Extract done in %.2fs: %d articles", dt, n)
+    with obs_span(
+        "pipeline.extract",
+        {"max_items": settings.max_items or 0, "parallel": settings.parallel},
+    ) as span:
+        t0 = time.time()
+        n = extract_step(limit=settings.max_items, parallel=settings.parallel, logger=logger)
+        dt = time.time() - t0
+        span.set({"articles_extracted": n})
+        logger.info("Extract done in %.2fs: %d articles", dt, n)
 
 
 @app.command()
@@ -97,10 +115,15 @@ def cluster(
     settings = _common_settings(out, since, max_items, dry_run, log_level, parallel)
     logger = setup_logging(settings.out_dir, settings.log_level)
     init_db()
-    t0 = time.time()
-    cs = cluster_step(jaccard_threshold=jaccard_threshold, num_perm=num_perm, logger=logger)
-    dt = time.time() - t0
-    logger.info("Cluster done in %.2fs: %d clusters", dt, len(cs))
+    with obs_span(
+        "pipeline.cluster",
+        {"jaccard_threshold": jaccard_threshold, "num_perm": num_perm},
+    ) as span:
+        t0 = time.time()
+        cs = cluster_step(jaccard_threshold=jaccard_threshold, num_perm=num_perm, logger=logger)
+        dt = time.time() - t0
+        span.set({"clusters": len(cs)})
+        logger.info("Cluster done in %.2fs: %d clusters", dt, len(cs))
 
 
 @app.command()
@@ -130,9 +153,13 @@ def summarize_cmd(
     # Resolve flags/env
     final_use_llm = use_llm or (os.getenv("SUMMARIZE_USE_LLM", "0") == "1")
     chosen_model = model or os.getenv("SUMMARIZE_MODEL", "moonshotai/kimi-k2")
-    t0 = time.time()
-    _ = summarize(logger=logger, use_llm=final_use_llm, model=chosen_model)
-    dt = time.time() - t0
+    with obs_span(
+        "pipeline.summarize",
+        {"use_llm": int(final_use_llm), "model": chosen_model},
+    ):
+        t0 = time.time()
+        res = summarize(logger=logger, use_llm=final_use_llm, model=chosen_model)
+        dt = time.time() - t0
     # Record model choice in run report
     try:
         report_path = settings.out_dir / "run_report.json"
@@ -140,6 +167,7 @@ def summarize_cmd(
             report = json.loads(report_path.read_text(encoding="utf-8"))
         else:
             report = {}
+        report.setdefault("observability", {"enabled": obs_metadata().get("enabled", False)})
         report.setdefault("params", {})
         report["params"].update({
             "summarize_model": chosen_model,
@@ -209,13 +237,19 @@ def publish(
     logger = setup_logging(settings.out_dir, settings.log_level)
     init_db()
     ctx = RunContext(out_dir=settings.out_dir, logger=logger)
-    t0 = time.time()
-    rows = publish_from_db(ctx.out_dir, dry_run=settings.dry_run, logger=ctx.logger)
-    # minimal report (clusters count + duration)
-    report = {"counts": {"clusters": len(rows)}, "durations": {"publish_sec": time.time() - t0}}
-    if not settings.dry_run:
-        (ctx.out_dir / "run_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    logger.info("Publish: %d clusters -> %s", len(rows), ctx.out_dir)
+    with obs_span("pipeline.publish") as span:
+        t0 = time.time()
+        rows = publish_from_db(ctx.out_dir, dry_run=settings.dry_run, logger=ctx.logger)
+        # minimal report (clusters count + duration)
+        report = {
+            "counts": {"clusters": len(rows)},
+            "durations": {"publish_sec": time.time() - t0},
+            "observability": {"enabled": obs_metadata().get("enabled", False)},
+        }
+        span.set({"clusters": len(rows)})
+        if not settings.dry_run:
+            (ctx.out_dir / "run_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info("Publish: %d clusters -> %s", len(rows), ctx.out_dir)
 
 
 @app.command("all")
@@ -244,36 +278,46 @@ def run_all(
     ctx = RunContext(out_dir=run_dir, logger=logger)
     init_db()
     report_path = ctx.out_dir / "run_report.json"
-    report = {"counts": {}, "durations": {}}
+    report = {"counts": {}, "durations": {}, "observability": {"enabled": obs_metadata().get("enabled", False)}}
     t0 = time.time()
 
     # Fetch
-    t = time.time()
-    totals = fetch_feeds(since=parse_since(since), max_items=max_items, logger=ctx.logger)
-    report["counts"].update({
-        "feeds": totals.get("feeds", 0),
-        "raw_entries": totals.get("entries", 0),
-        "raw_inserted": totals.get("inserted", 0),
-    })
-    report["durations"]["fetch_sec"] = time.time() - t
-    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    logger.info("Fetch: %d feeds, %d new entries", totals.get("feeds", 0), totals.get("inserted", 0))
+    with obs_span("pipeline.fetch", {"since": (parse_since(since).isoformat() if since else ""), "max_items": max_items or 0}) as span:
+        t = time.time()
+        totals = fetch_feeds(since=parse_since(since), max_items=max_items, logger=ctx.logger)
+        report["counts"].update({
+            "feeds": totals.get("feeds", 0),
+            "raw_entries": totals.get("entries", 0),
+            "raw_inserted": totals.get("inserted", 0),
+        })
+        report["durations"]["fetch_sec"] = time.time() - t
+        span.set({
+            "feeds": totals.get("feeds", 0),
+            "raw_entries": totals.get("entries", 0),
+            "raw_inserted": totals.get("inserted", 0),
+        })
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info("Fetch: %d feeds, %d new entries", totals.get("feeds", 0), totals.get("inserted", 0))
 
     # Extract
-    t = time.time()
-    n_ext = extract_step(limit=max_items, parallel=parallel, logger=ctx.logger)
-    report["counts"]["articles_extracted"] = n_ext
-    report["durations"]["extract_sec"] = time.time() - t
-    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    logger.info("Extract: %d articles", n_ext)
+    with obs_span("pipeline.extract", {"max_items": max_items or 0, "parallel": parallel}) as span:
+        t = time.time()
+        n_ext = extract_step(limit=max_items, parallel=parallel, logger=ctx.logger)
+        report["counts"]["articles_extracted"] = n_ext
+        report["durations"]["extract_sec"] = time.time() - t
+        span.set({"articles_extracted": n_ext})
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info("Extract: %d articles", n_ext)
 
     # Cluster
-    t = time.time()
-    clusters = cluster_step(logger=ctx.logger)
-    report["counts"]["clusters"] = len(clusters)
-    report["durations"]["cluster_sec"] = time.time() - t
-    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    logger.info("Cluster: %d clusters", len(clusters))
+    with obs_span("pipeline.cluster") as span:
+        t = time.time()
+        clusters = cluster_step(logger=ctx.logger)
+        report["counts"]["clusters"] = len(clusters)
+        report["durations"]["cluster_sec"] = time.time() - t
+        span.set({"clusters": len(clusters)})
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info("Cluster: %d clusters", len(clusters))
 
     # Summarize (persist to DB)
     t = time.time()
@@ -281,21 +325,24 @@ def run_all(
 
     final_use_llm = use_llm or (os.getenv("SUMMARIZE_USE_LLM", "0") == "1")
     chosen_model = model or os.getenv("SUMMARIZE_MODEL", "moonshotai/kimi-k2")
-    _ = summarize(logger=ctx.logger, use_llm=final_use_llm, model=chosen_model)
-    report["durations"]["summarize_sec"] = time.time() - t
-    # Record model choice
-    report.setdefault("params", {})
-    report["params"].update({
-        "summarize_model": chosen_model,
-        "use_llm": final_use_llm,
-    })
-    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    logger.info("Summarize: done")
+    with obs_span("pipeline.summarize", {"use_llm": int(final_use_llm), "model": chosen_model}):
+        _ = summarize(logger=ctx.logger, use_llm=final_use_llm, model=chosen_model)
+        report["durations"]["summarize_sec"] = time.time() - t
+        # Record model choice
+        report.setdefault("params", {})
+        report["params"].update({
+            "summarize_model": chosen_model,
+            "use_llm": final_use_llm,
+        })
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info("Summarize: done")
 
     # Publish from DB (no re-summarize)
-    t = time.time()
-    _ = publish_from_db(ctx.out_dir, logger=ctx.logger)
-    report["durations"]["publish_sec"] = time.time() - t
+    with obs_span("pipeline.publish"):
+        t = time.time()
+        rows = publish_from_db(ctx.out_dir, logger=ctx.logger)
+        report["counts"]["clusters"] = len(rows)
+        report["durations"]["publish_sec"] = time.time() - t
     total = time.time() - t0
     report["durations"]["total_sec"] = total
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
