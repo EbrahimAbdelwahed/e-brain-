@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
-import math
+import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -17,7 +17,10 @@ def _load_weights(path: str = "config/sources.yml") -> dict[str, float]:
 
 
 def _freshness_decay(published_at_list: list[str | None]) -> float:
-    # Use 1 / (1 + days_since_max)
+    """Exponential freshness decay with configurable half-life (hours).
+
+    freshness = exp(-ln(2) * age_hours / half_life_hours)
+    """
     dates = []
     for p in published_at_list:
         if not p:
@@ -29,8 +32,60 @@ def _freshness_decay(published_at_list: list[str | None]) -> float:
     if not dates:
         return 0.0
     latest = max(dates)
-    days = (datetime.now(timezone.utc) - latest).total_seconds() / 86400.0
-    return 1.0 / (1.0 + max(0.0, days))
+    age_hours = (datetime.now(timezone.utc) - latest).total_seconds() / 3600.0
+    if age_hours < 0:
+        age_hours = 0.0
+    try:
+        half_life_hours = int(os.getenv("RANK_HALF_LIFE_HOURS", "24"))
+        if half_life_hours <= 0:
+            half_life_hours = 24
+    except Exception:  # noqa: BLE001
+        half_life_hours = 24
+    # exp(-ln(2) * t / T_half) == 2 ** (-t / T_half)
+    freshness = 2 ** (-(age_hours / float(half_life_hours)))
+    # Guard numerical issues
+    if freshness < 0:
+        freshness = 0.0
+    if freshness > 1:
+        freshness = 1.0
+    return float(freshness)
+
+
+_RE_FLAGS = re.IGNORECASE | re.MULTILINE
+
+
+def _heuristic_boosts(articles: list[dict[str, Any]]) -> float:
+    """Cluster-level boosts/penalty based on simple cues in title/text.
+
+    Applies once per cluster:
+    +0.1 preregistration: 'prereg' or 'registered report'
+    +0.1 open code/data: 'github' or 'open data'
+    +0.2 replication: 'replication'
+    +0.2 policy impact: 'policy' or 'regulator'
+    -0.1 no methods: across all, none of {'random', 'double-blind', 'n='}
+    """
+    texts: list[str] = []
+    for a in articles:
+        t = (a.get("title") or "") + "\n" + (a.get("text") or "")
+        texts.append(t)
+    blob = "\n\n".join(texts)
+
+    boost = 0.0
+    # Boosts
+    if re.search(r"\bprereg\w*\b|registered report", blob, _RE_FLAGS):
+        boost += 0.1
+    if re.search(r"github|open data", blob, _RE_FLAGS):
+        boost += 0.1
+    if re.search(r"replication", blob, _RE_FLAGS):
+        boost += 0.2
+    if re.search(r"\bpolicy\b|regulator", blob, _RE_FLAGS):
+        boost += 0.2
+
+    # Penalty if NO method cues across all
+    has_methods = re.search(r"random|double-?blind|n=", blob, _RE_FLAGS) is not None
+    if not has_methods:
+        boost -= 0.1
+    return boost
 
 
 def score_clusters() -> list[dict[str, Any]]:
@@ -46,8 +101,14 @@ def score_clusters() -> list[dict[str, Any]]:
         sw = sum(source_weights) / len(source_weights) if source_weights else 1.0
         fr = _freshness_decay([a.get("published_at") for a in arts])
         cs = min(1.0, len(arts) / 5.0)
-        score = 0.5 * fr + 0.3 * sw + 0.2 * cs
-        scored.append({"cluster_id": c["cluster_id"], "score": score, "size": len(arts)})
+        base = 0.5 * fr + 0.3 * sw + 0.2 * cs
+        heur = _heuristic_boosts(arts) if arts else 0.0
+        score = base + heur
+        # Clamp to [0,1]
+        if score < 0:
+            score = 0.0
+        if score > 1:
+            score = 1.0
+        scored.append({"cluster_id": c["cluster_id"], "score": float(score), "size": len(arts)})
     scored.sort(key=lambda x: x["score"], reverse=True)
     return scored
-

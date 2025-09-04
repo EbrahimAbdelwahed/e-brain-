@@ -33,6 +33,19 @@ Outputs (under the run folder)
 - `run_report.json`: counts, durations, failures, rate-limit stats
 - `logs/run.log`: pipeline logs
 
+Ranking
+
+- Formula: base score = `0.5*freshness + 0.3*source_weight + 0.2*cluster_size`.
+- Freshness: exponential decay with half-life hours (env `RANK_HALF_LIFE_HOURS`, default `24`): `freshness = exp(-ln(2) * age_hours / half_life_hours)`.
+- Cluster size: `min(1.0, len(articles)/5)`.
+- Heuristics (applied once per cluster; case-insensitive):
+  - +0.1 preregistration cues: contains "prereg" or "registered report".
+  - +0.1 open code/data: contains "github" or "open data".
+  - +0.2 replication: contains "replication".
+  - +0.2 policy impact: contains "policy" or "regulator".
+  - -0.1 if no methods cues anywhere across articles: none of {"random", "double-blind", "n="}.
+- Final score is clamped to [0,1]. Output shapes are unchanged; only ordering/scores may differ.
+
 Summaries Persistence
 
 - Summaries are persisted in SQLite table `summaries` with columns: `cluster_id` (PK), `tl_dr`, `bullets_json`, `citations_json`, `score`, `created_at`, `published_at`, `version_hash`.
@@ -43,6 +56,7 @@ Environment (.env)
 
 - `OPENAI_API_KEY=...` (required for real embeddings)
 - Optional: `EMBED_OFFLINE=1` to force offline embedding stub
+- Optional (ranking): `RANK_HALF_LIFE_HOURS=24` to control freshness half-life.
 
 LLM Summarization (OpenRouter)
 
