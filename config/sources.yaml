@@ -1,0 +1,11 @@
+sources:
+  crossref:
+    base_url: https://api.crossref.org
+    rate_limit_per_sec: 5
+    enabled: false  # to be wired in M1
+
+  epmc:
+    base_url: https://www.ebi.ac.uk/europepmc/webservices/rest
+    rate_limit_per_sec: 5
+    enabled: false  # to be wired in M1
+

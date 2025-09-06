@@ -127,6 +127,35 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("eval-models", help="No-op (not implemented in this codebase)")
     s.set_defaults(func=_cmd_eval_models)
 
+    # Discovery scaffold
+    def _cmd_discover(args: argparse.Namespace) -> None:
+        from e_brain.curation.discovery.runner import run_discovery
+
+        res = run_discovery(
+            window_days=args.window_days,
+            out_dir=args.out,
+            ipfs_fetch=args.ipfs_fetch,
+            store_to_db=args.store_to_db,
+        )
+        logger.info("discover_done", extra=res)
+
+    def _str2bool(v: str) -> bool:
+        if isinstance(v, bool):
+            return v
+        val = str(v).strip().lower()
+        if val in ("yes", "true", "t", "1", "y"):  # enable
+            return True
+        if val in ("no", "false", "f", "0", "n"):  # disable
+            return False
+        raise argparse.ArgumentTypeError("Boolean value expected.")
+
+    s = sub.add_parser("discover", help="Run DOI discovery scaffold and emit artifacts")
+    s.add_argument("--window-days", type=int, default=60)
+    s.add_argument("--out", default="artifacts")
+    s.add_argument("--ipfs-fetch", nargs='?', const=True, default=False, type=_str2bool)
+    s.add_argument("--store-to-db", nargs='?', const=True, default=True, type=_str2bool)
+    s.set_defaults(func=_cmd_discover)
+
     s = sub.add_parser("all", help="Run fetch -> embed -> summarize -> publish")
     s.add_argument("--feeds-file", default=None)
     s.add_argument("--max", type=int, default=20)
@@ -150,4 +179,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -3,6 +3,7 @@ psycopg[binary]>=3.2.1
 feedparser>=6.0.11
 requests>=2.31.0
 beautifulsoup4>=4.12.3
+tiktoken>=0.7.0
 
 # LLM program optimization
 dspy-ai==3.0.3

@@ -8,7 +8,7 @@ from openai import OpenAI
 from ..config import get_settings
 from ..db import insert_candidate_post, semantic_search
 from ..util.logging import get_logger
-from ..moderation.moderation import moderate_text
+from ..moderation.moderation import moderate_text, MAX_TWEET_LENGTH
 
 
 logger = get_logger(__name__)
@@ -33,7 +33,8 @@ def generate_post_from_query(query: str, max_sources: int = 5) -> Optional[str]:
 
     q_emb = embed_texts([query])[0]
     matches = semantic_search(q_emb, limit=max_sources)
-    bullets = [f"- {m['text']}" for m in matches]
+    # Keep context concise to control prompt size and focus
+    bullets = [f"- {m['text'][:400].rstrip()}{'…' if len(m['text']) > 400 else ''}" for m in matches]
     context = "\n".join(bullets)
 
     # Optional DSPy path (toggle via USE_DSPY=true)
@@ -55,6 +56,7 @@ def generate_post_from_query(query: str, max_sources: int = 5) -> Optional[str]:
             f"Write an audience-ready X post about: '{query}'."
             " Prefer factual clarity, avoid hype, keep it short."
             " If concept is complex, offer a concrete example."
+            " Keep the final output under 260 characters, no hashtags, no links."
         )
         resp = client.chat.completions.create(
             model=s.chat_model,
@@ -63,14 +65,35 @@ def generate_post_from_query(query: str, max_sources: int = 5) -> Optional[str]:
                 {"role": "user", "content": prompt},
             ],
             temperature=0.7,
-            max_tokens=120,
+            max_tokens=80,
         )
         text = resp.choices[0].message.content.strip()
+    # Final clamp to ensure moderation length pass
+    text = _clamp_to_limit(text, MAX_TWEET_LENGTH)
     ok, reason = moderate_text(text)
     if not ok:
         logger.info("moderation_rejected", extra={"reason": reason})
         return None
     return text
+
+
+def _clamp_to_limit(text: str, limit: int) -> str:
+    # Normalize whitespace
+    t = " ".join((text or "").strip().split())
+    if len(t) <= limit:
+        return t
+    # Try to end at sentence boundary
+    cut = t[:limit]
+    last_stop = max(cut.rfind("."), cut.rfind("!"), cut.rfind("?"))
+    if last_stop >= 0 and last_stop >= limit // 2:
+        return cut[: last_stop + 1]
+    # Else cut at last space and add ellipsis
+    last_space = cut.rfind(" ")
+    if last_space >= 0 and last_space >= limit // 2:
+        out = cut[:last_space].rstrip()
+        return out if len(out) <= limit else out[:limit]
+    # Hard cut with ellipsis if possible
+    return (t[: max(0, limit - 1)] + "…") if limit > 1 else ""
 
 
 def generate_and_store(query: str, max_sources: int = 5) -> Optional[int]:

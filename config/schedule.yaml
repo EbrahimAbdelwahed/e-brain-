@@ -1,0 +1,7 @@
+defaults:
+  window_days: 60
+
+cron:
+  # Placeholder; GH workflow uses workflow_dispatch until M1
+  discover: "0 4 * * 1"  # Mondays 04:00 UTC
+

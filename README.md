@@ -40,6 +40,7 @@ Runbook (CLI)
   - Publish summaries: `python -m pipeline publish [--limit 3] [--tz US/Eastern]`
   - Full pipeline: `python -m pipeline all`
   - Evaluate models: `python -m pipeline eval-models` (no-op)
+  - DOI discovery (scaffold): `python -m pipeline discover [--window-days 60] [--out artifacts] [--ipfs-fetch] [--store-to-db]`
 
 LLM Summarization (OpenRouter)
 - Uses OpenRouter for LLM access. Control behavior via `SUMMARIZE_USE_LLM`, `SUMMARIZE_MODEL`, `SUMMARIZE_TEMPERATURE`, `SUMMARIZE_TOP_P`, and `SUMMARIZE_SEED`. Set `OPENROUTER_API_KEY` and optionally `OPENROUTER_BASE_URL`.
@@ -61,3 +62,4 @@ Robots Compliance
 
 Notes
 - X posting, OAuth tokens, and post scheduling are not part of this pipeline and have been removed from documentation.
+ - See `docs/ipfs.md` for IPFS base path and DOI path encoding.

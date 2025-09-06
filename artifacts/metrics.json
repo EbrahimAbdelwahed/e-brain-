@@ -1,0 +1,14 @@
+{
+  "window_start": "2025-07-08T15:05:35.779099+00:00",
+  "window_end": "2025-09-06T15:05:35.779099+00:00",
+  "clients": [
+    {
+      "emitted": 5,
+      "source": "seed"
+    }
+  ],
+  "emitted_count": 3,
+  "artifact_path": "artifacts\\discovery_results_2025-36.ndjson",
+  "normalized_count": 5,
+  "deduped_count": 3
+}
